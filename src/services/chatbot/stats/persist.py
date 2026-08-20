@@ -3,7 +3,9 @@ Persists exchange and execution statistics through the repositories.
 """
 
 # --- IMPORTS ---
+from src.databases.relational.models.exchanges import Exchanges
 from src.resources import get_resources
+from src.types.stats import ExchangeStats
 from src.types.stats import SessionStats
 
 import logging
@@ -31,5 +33,27 @@ async def upsert_session(session_data: SessionStats) -> None:
     logger.debug(
         f'[Insert Stats] Session upserted. ID: {session_data["id"]}'
     )
+
+
+async def insert_exchange(
+    exchange_data: ExchangeStats,
+) -> Exchanges:
+    """
+    Insert the exchange metrics into database.
+
+    :param exchange_data: Dictionary with exchange fields.
+
+    :returns: The created exchange object.
+    """
+    # insert exchange
+    exchange = await get_resources().exchanges_repository.insert_exchange(
+        Exchanges(**exchange_data)
+    )
+    logger.debug(
+        f'[Insert Stats] Exchange saved. ID: {exchange.id}, '
+        f'Session: {exchange.session_id}'
+    )
+
+    return exchange
 
 
