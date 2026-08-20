@@ -6,6 +6,7 @@ Chatbot endpoints.
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Request
+from fastapi.responses import StreamingResponse
 from src.dependencies.auth import verify_api_key
 from src.dependencies.client_info import get_client_ip
 from src.errors.database_unavailable_error import DatabaseUnavailableError
@@ -24,6 +25,7 @@ from src.schemas.endpoints.chatbot_response import ChatbotResponse
 from src.schemas.errors import VALIDATION_RESPONSE
 from src.schemas.errors import error_responses
 from src.services.chatbot.respond import respond
+from src.services.chatbot.respond_stream import respond_stream
 from src.services.chatbot.types import ChatbotResult
 from src.services.chatbot.types import ChatMessage
 
@@ -78,6 +80,67 @@ async def chatbot_endpoint(
         ChatMessage.from_payload(payload),
         request_ip=get_client_ip(request),
         user_agent=request.headers.get('user-agent'),
+    )
+
+
+@router.post('/response/stream',
+             summary='Ask a question and stream the answer (SSE)',
+             dependencies=[Depends(verify_api_key)],
+             response_class=StreamingResponse,
+             responses={
+                 200: {
+                     'description': 'Server-sent event stream of the answer.',
+                     'content': {'text/event-stream': {}},
+                 },
+                 **ANSWER_ERRORS,
+             })
+async def chatbot_stream_endpoint(
+    request: Request,
+    payload: ChatbotPayload,
+) -> StreamingResponse:
+    """
+    Answers a question about the subject, streaming tokens as they are produced.
+
+    Same input and same answer as `POST /api/chatbot/response`, delivered as
+    server-sent events. Each frame is `data: <json>\\n\\n`, and every event
+    carries a `type`:
+
+    | `type` | payload | meaning |
+    | --- | --- | --- |
+    | `ready` | `sessionId` | stream accepted, generation started |
+    | `token` | `content` | next chunk of the answer, append it as-is |
+    | `stream_end` | — | no more tokens |
+    | `done` | `answered`, `category`, `exchangeId` | terminal event |
+    | `error` | `error_code`, `message` | generation failed, stream ends |
+
+    Consume until `done` or `error`; only one of them is ever sent. As in the
+    JSON endpoint, `done` always carries an `exchangeId`, cache hits
+    included.
+
+    Errors raised **before** the stream starts (authentication, validation,
+    transcription) are returned as a regular JSON error response with the
+    status codes listed below. Once the stream is open the status is already
+    `200`, so later failures arrive as an `error` event instead — its
+    `error_code` is one of `timeout`, `rate_limit`, `auth`, `unavailable` or
+    `unknown`.
+
+    Token text is HTML-escaped, so it can be rendered without further
+    sanitizing.
+    """
+    generator = await respond_stream(
+        ChatMessage.from_payload(payload),
+        request_ip=get_client_ip(request),
+        user_agent=request.headers.get('user-agent'),
+    )
+
+    return StreamingResponse(
+        generator,
+        media_type='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        },
     )
 
 
