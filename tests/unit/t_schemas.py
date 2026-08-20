@@ -6,6 +6,7 @@ Unit tests for request schemas / validators.
 from src.config import config
 from src.errors.invalid_request_error import InvalidRequestError
 from src.errors.payload_too_large_error import PayloadTooLargeError
+from src.schemas.endpoints.chatbot_response import ChatbotPayload
 from src.schemas.endpoints.chatbot_response import Message
 from typing import Any
 from typing import cast
@@ -88,6 +89,45 @@ def test_audio_base64_at_limit_is_accepted() -> None:
         messageType='audio',
         audioBase64='a' * config.MAX_AUDIO_BASE64_SIZE,
     )
+
+
+# --- CHATBOT ROUTER: sessionId ---
+def _payload(session_id: str) -> dict:
+    return {
+        'sessionId': session_id,
+        'message': {'content': 'oi tudo bem', 'messageType': 'text'},
+    }
+
+
+def test_session_id_valid_charset() -> None:
+    router = ChatbotPayload(**_payload('abc-DEF_0123'))
+    assert router.sessionId == 'abc-DEF_0123'
+
+
+def test_session_id_minimum_length_boundary() -> None:
+    ChatbotPayload(**_payload('a' * 10))
+    with pytest.raises(InvalidRequestError):
+        ChatbotPayload(**_payload('a' * 9))
+
+
+def test_session_id_maximum_length_boundary() -> None:
+    ChatbotPayload(**_payload('a' * 50))
+    with pytest.raises(InvalidRequestError):
+        ChatbotPayload(**_payload('a' * 51))
+
+
+@pytest.mark.parametrize(
+    'bad_session',
+    [
+        'has spaces in it',
+        'special!chars#',
+        'memory:inject',  # ':' could collide with the Redis key namespace
+        'ação-sessão-12',
+    ],
+)
+def test_session_id_invalid_characters_are_rejected(bad_session: str) -> None:
+    with pytest.raises(InvalidRequestError):
+        ChatbotPayload(**_payload(bad_session))
 
 # --- REPOSITORY ERROR MAPPING ---
 @pytest.mark.anyio
