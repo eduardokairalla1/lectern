@@ -112,3 +112,33 @@ def _filter_documents(
     return accepted
 
 
+def format_documents(docs: list[Document]) -> str:
+    """
+    Format retrieved documents into structured text for the LLM.
+
+    :param docs: List of retrieved documents.
+
+    :return: Formatted string with document contents.
+    """
+    # no documents: return a placeholder message
+    if not docs:
+        return 'No relevant documents found.'
+
+    # build the formatted string with document headers and content
+    formatted = []
+    for i, doc in enumerate(docs, 1):
+        content = _clean_text(doc).strip()
+        labels = {
+            'Category': doc.metadata.get('category'),
+            'Section': doc.metadata.get('section'),
+        }
+        header_parts = [f'[Document {i}]'] + [
+            f'{label}: {value}' for label, value in labels.items() if value
+        ]
+        header = ' | '.join(header_parts)
+        formatted.append(f'{header}\n{content}')
+
+    # return the formatted documents
+    return '\n\n'.join(formatted)
+
+

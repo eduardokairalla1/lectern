@@ -9,6 +9,7 @@ from src.services.chatbot.steps.retriever import SCORE_THRESHOLD
 from src.services.chatbot.steps.retriever import _clean_text
 from src.services.chatbot.steps.retriever import _filter_documents
 from src.services.chatbot.steps.retriever import _to_retrieved_document
+from src.services.chatbot.steps.retriever import format_documents
 
 
 # --- HELPERS ---
@@ -102,3 +103,22 @@ class TestToRetrievedDocument:
         }
 
 
+class TestFormatDocuments:
+
+    def test_says_so_when_there_is_nothing(self) -> None:
+        assert format_documents([]) == 'No relevant documents found.'
+
+    def test_numbers_each_document(self) -> None:
+        formatted = format_documents([_doc(text='a'), _doc(text='b')])
+        assert '[Document 1]' in formatted and '[Document 2]' in formatted
+
+    def test_includes_the_available_labels(self) -> None:
+        formatted = format_documents([_doc(category='work', section='API')])
+        assert 'Category: work' in formatted and 'Section: API' in formatted
+
+    def test_omits_labels_that_are_missing(self) -> None:
+        assert 'Category:' not in format_documents([_doc()])
+
+    def test_uses_the_clean_text_not_the_breadcrumb(self) -> None:
+        formatted = format_documents([_doc(text='clean', page='breadcrumb')])
+        assert 'clean' in formatted and 'breadcrumb' not in formatted
