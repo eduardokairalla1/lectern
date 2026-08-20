@@ -73,3 +73,24 @@ async def delete(*keys: str) -> None:
             {'operation': 'delete', 'key': keys, 'error': str(e)}
         ) from e
 
+
+async def expire(key: str, ttl: int) -> None:
+    """
+    Sets/refreshes the time-to-live of an existing key.
+    """
+    # set key expiration
+    try:
+        await get_resources().redis_client.expire(key, ttl)
+        logger.debug('Set expiration on Redis key: %s (ttl=%s)', key, ttl)
+
+    # errors occurred: raise RedisUnavailableError with details
+    except Exception as e:
+        raise RedisUnavailableError(
+            {
+                'operation': 'expire',
+                'key': key,
+                'ttl': str(ttl),
+                'error': str(e),
+            }
+        ) from e
+
