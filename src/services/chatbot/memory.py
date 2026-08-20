@@ -109,6 +109,21 @@ async def get_recent_interactions(session_id: str) -> list[tuple[str, str]]:
     return []
 
 
+async def load_memory(
+    session_id: str,
+    recent: list[tuple[str, str]],
+) -> str:
+    """
+    Loads the conversation memory for a session.
+
+    :param session_id: Conversation identifier.
+    :param recent: Recent interactions, as a list of (user_input, response).
+
+    :return: The formatted memory text for the prompt.
+    """
+    return _format(await _get_summary(session_id), recent)
+
+
 async def update_recent_interactions(
     session_id: str,
     user_input: str,

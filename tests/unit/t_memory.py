@@ -5,6 +5,7 @@ Unit tests for the conversation memory (summary + recent interactions).
 # --- IMPORTS ---
 from src.resources import Resources
 from src.services.chatbot import memory
+from src.services.chatbot.prompts import INITIAL_SUMMARY
 from tests.unit.conftest import FakeRedis
 
 import json
@@ -98,3 +99,31 @@ class TestUpdateRecentInteractions:
         assert await memory.get_recent_interactions('s-2') == []
 
 
+class TestLoadMemory:
+
+    @pytest.mark.anyio
+    async def test_falls_back_to_the_initial_summary(
+        self, resources: Resources
+    ) -> None:
+        assert await memory.load_memory('s-1', []) == INITIAL_SUMMARY
+
+    @pytest.mark.anyio
+    async def test_combines_the_stored_summary_with_the_interactions(
+        self, resources: Resources, fake_redis: FakeRedis
+    ) -> None:
+        fake_redis.data[memory._summary_key('s-1')] = 'stored summary'
+
+        loaded = await memory.load_memory('s-1', [('q', 'a')])
+        assert loaded.startswith('stored summary')
+        assert 'Question 1: q' in loaded
+
+    @pytest.mark.anyio
+    async def test_uses_the_interactions_it_is_given(
+        self, resources: Resources
+    ) -> None:
+        # the orchestrator already read them to decide cache eligibility, so
+        # load_memory must not go back to Redis for a second copy
+        await memory.update_recent_interactions('s-1', 'stored', 'ignored')
+
+        loaded = await memory.load_memory('s-1', [('passed', 'in')])
+        assert 'passed' in loaded and 'stored' not in loaded
