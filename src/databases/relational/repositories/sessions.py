@@ -3,6 +3,7 @@ Sessions table repository.
 """
 
 # --- IMPORTS ---
+from sqlalchemy import select
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from src.databases.relational.models.sessions import Sessions
@@ -54,3 +55,22 @@ class SessionsRepository(BaseRepository):
 
             # commit changes
             await session.commit()
+
+
+    async def get_by_id(self, session_id: str) -> Sessions | None:
+        """
+        Retrieves a session by id.
+
+        :param session_id: Client session identifier.
+
+        :returns: Session or None if not found.
+        """
+        # open database connection
+        async with self._session() as session:
+
+            # retrieves session by id from database
+            stmt = select(Sessions).where(Sessions.id == session_id)
+            result = await session.execute(stmt)
+
+            # returns Session or None
+            return result.scalar_one_or_none()
