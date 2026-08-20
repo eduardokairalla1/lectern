@@ -63,6 +63,32 @@ async def upsert_feedback(
     )
 
 
+async def upsert_session_feedback(
+    session_id: str,
+    score: int,
+    comment: str | None = None
+) -> None:
+    """
+    Records the visitor's rating of a whole conversation, at its current
+    depth.
+
+    :param session_id: Client session identifier.
+    :param score: Visitor rating of the conversation, from 0 to 10.
+    :param comment: Optional free-text note.
+
+    :returns: None.
+    """
+    await get_resources().session_feedback_repository.upsert_session_feedback(
+        session_id=session_id,
+        score=score,
+        comment=comment,
+    )
+    logger.debug(
+        f'[Insert Stats] Session feedback upserted. '
+        f'Session: {session_id}, Score: {score}'
+    )
+
+
 async def insert_exchange(
     exchange_data: ExchangeStats,
 ) -> Exchanges:
