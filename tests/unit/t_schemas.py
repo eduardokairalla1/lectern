@@ -173,3 +173,15 @@ async def test_unexpected_database_error_is_reported_as_unavailable() -> None:
     with pytest.raises(DatabaseUnavailableError):
         async with repository._session():
             raise ConnectionError('server closed the connection')
+def test_broker_publishing_is_bounded_by_a_timeout() -> None:
+    """dispatch_task swallows exceptions, but it cannot swallow a hang: a
+    broker that accepts the connection and never answers would block the
+    request that already produced its answer. These bounds are what turn that
+    into a logged failure."""
+    from src.worker import celery_app
+
+    options = celery_app.conf.broker_transport_options
+    assert options['socket_connect_timeout'] > 0
+    assert options['socket_timeout'] > 0
+    assert celery_app.conf.broker_connection_timeout > 0
+    assert celery_app.conf.task_publish_retry_policy['max_retries'] == 0
