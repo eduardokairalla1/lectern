@@ -135,3 +135,28 @@ async def invalidate_cached_response(query: str) -> bool:
         return False
 
 
+async def clear_cached_responses() -> int:
+    """
+    Removes every cached response.
+
+    :return: Number of keys deleted.
+    """
+    # delete all cached responses
+    try:
+        keys = await operations.scan_keys(f'{CACHE_PREFIX}*')
+
+        # no keys to delete: return 0
+        if not keys:
+            return 0
+
+        # delete the cached responses
+        await operations.delete(*keys)
+        logger.info('[Cache] Cleared %d cached responses', len(keys))
+
+        # return the number of keys deleted
+        return len(keys)
+
+    # Redis is unavailable: log a warning and return 0
+    except RedisUnavailableError as e:
+        logger.warning('[Cache] Error clearing cache: %s', e.args)
+        return 0
