@@ -109,6 +109,14 @@ class AnswerMetadata(TypedDict):
     category: str
 
 
+class ChatbotResult(TypedDict):
+    """
+    Final chatbot response returned to the client.
+    """
+    response: str
+    exchangeId: NotRequired[str]
+
+
 StreamEventType = Literal[
     'ready',        # stream accepted, generation started
     'token',        # next chunk of the answer
