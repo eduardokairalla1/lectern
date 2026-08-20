@@ -230,6 +230,24 @@ describe the scenario for you; never echo them.
 ASSISTANT_SYSTEM_PROMPT = _render(ASSISTANT_SYSTEM_TEMPLATE)
 
 
+# metadata extraction instructions
+METADATA_EXTRACTION_INSTRUCTIONS = """
+Return ONLY valid JSON: {"answered": true/false, "category": "string"}
+- answered: true when the assistant actually helped — it gave the requested
+  info, answered partially with real content, or appropriately handled a
+  greeting / "what can you do" / recommendation. A response that contains any
+  real, useful content is true.
+- answered: false when the whole response is an apology / refusal for not
+  having the information, a redirect because the topic is out of scope, OR a
+  request to rephrase because the user's message had no real question
+  (gibberish, unintelligible, empty, just noise). Asking the user to clarify is
+  NOT answering. Do NOT mark a genuine (even partial) answer as false.
+- category: question topic in English (e.g., "experience", "projects",
+  "contact", "skills"). Use "unknown" if unclear or if the message was
+  gibberish.
+"""
+
+
 # NOTE: the reformulated query is intentionally produced in the language of
 #       the indexed knowledge base, because matching the query language to the
 #       documents maximizes retrieval recall.
@@ -350,6 +368,22 @@ def build_answer_prompt(
         SystemMessage(content=system_content),
         HumanMessage(content=message),
     ]
+
+
+def build_metadata_prompt(response: str) -> str:
+    """
+    Builds the prompt that extracts answered/category metadata from a
+    finished response.
+
+    :param response: The full assistant response text.
+
+    :return: The formatted prompt string.
+    """
+    return (
+        'Analyze this chatbot assistant response and return JSON.\n'
+        f'Response (may be in any language): {response[:500]}\n\n'
+        f'{METADATA_EXTRACTION_INSTRUCTIONS}'
+    )
 
 
 def build_rewrite_prompt(query: str, context: str) -> list[BaseMessage]:
