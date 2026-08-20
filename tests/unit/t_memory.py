@@ -57,3 +57,44 @@ class TestGetRecentInteractions:
         assert await memory.get_recent_interactions('s-1') == [('q', 'a')]
 
 
+class TestUpdateRecentInteractions:
+
+    @pytest.mark.anyio
+    async def test_stores_the_first_interaction(
+        self, resources: Resources
+    ) -> None:
+        await memory.update_recent_interactions('s-1', 'q', 'a')
+        assert await memory.get_recent_interactions('s-1') == [('q', 'a')]
+
+    @pytest.mark.anyio
+    async def test_appends_in_chronological_order(
+        self, resources: Resources
+    ) -> None:
+        await memory.update_recent_interactions('s-1', 'q1', 'a1')
+        await memory.update_recent_interactions('s-1', 'q2', 'a2')
+        assert await memory.get_recent_interactions('s-1') == [
+            ('q1', 'a1'), ('q2', 'a2')
+        ]
+
+    @pytest.mark.anyio
+    async def test_keeps_only_the_most_recent_ones(
+        self, resources: Resources
+    ) -> None:
+        for i in range(memory.MAX_RECENT_INTERACTIONS + 2):
+            await memory.update_recent_interactions('s-1', f'q{i}', f'a{i}')
+
+        stored = await memory.get_recent_interactions('s-1')
+        assert len(stored) == memory.MAX_RECENT_INTERACTIONS
+        assert stored[-1] == (
+            f'q{memory.MAX_RECENT_INTERACTIONS + 1}',
+            f'a{memory.MAX_RECENT_INTERACTIONS + 1}',
+        )
+
+    @pytest.mark.anyio
+    async def test_sessions_do_not_share_interactions(
+        self, resources: Resources
+    ) -> None:
+        await memory.update_recent_interactions('s-1', 'q', 'a')
+        assert await memory.get_recent_interactions('s-2') == []
+
+

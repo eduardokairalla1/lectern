@@ -87,3 +87,29 @@ async def get_recent_interactions(session_id: str) -> list[tuple[str, str]]:
     return []
 
 
+async def update_recent_interactions(
+    session_id: str,
+    user_input: str,
+    response: str
+) -> None:
+    """
+    Updates the recent raw (question, answer) interactions for a session.
+
+    :param session_id: Conversation identifier.
+    :param user_input: Latest user message.
+    :param response: Assistant reply.
+
+    :returns: None.
+    """
+    # get the recent interactions
+    recent = await get_recent_interactions(session_id)
+
+    # append the latest interaction and trim to the max size
+    recent.append((user_input, response))
+    recent = recent[-MAX_RECENT_INTERACTIONS:]
+
+    # store the recent interactions in Redis
+    data = json.dumps([{'input': i, 'response': r} for i, r in recent])
+    await operations.set(_recent_key(session_id), data, TTL_SECONDS)
+
+
