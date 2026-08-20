@@ -3,10 +3,14 @@ Audio transcription helper.
 """
 
 # --- IMPORTS ---
+from io import BytesIO
+from openai import omit
+from src.clients.llms import TRANSCRIBE_LLM
 from src.config import config
 from src.errors.invalid_request_error import InvalidRequestError
 from src.errors.payload_too_large_error import PayloadTooLargeError
 from src.errors.processing_error import ProcessingError
+from src.errors.transcription_error import TranscriptionError
 from src.errors.unsupported_media_type_error import UnsupportedMediaTypeError
 from tempfile import NamedTemporaryFile
 
@@ -182,3 +186,64 @@ def get_audio_format(audio_bytes: bytes) -> str:
     # return the detected audio format extension
     return kind.extension
 
+
+async def transcribe_audio(
+    media_base64: str,
+    language: str | None = None,
+    prompt: str | None = None,
+) -> str:
+    """
+    Transcribe audio file to text using a transcription model.
+
+    :param media_base64: Base64 string of the audio file.
+    :param language: Optional language code of the audio. When None, the
+        transcription model auto-detects the spoken language.
+    :param prompt: Optional context prompt to guide the transcription model.
+
+    :raises BackendError: If the audio is invalid, too large, unsupported,
+        or transcription fails.
+
+    :return: Transcribed text.
+    """
+    # get decoded audio and extension
+    audio_bytes = await asyncio.to_thread(decode_audio, media_base64)
+    ext = get_audio_format(audio_bytes)
+
+    # validate audio format
+    await _validate_audio_duration(audio_bytes, ext)
+
+    # prepare audio file for transcription
+    audio_file = BytesIO(audio_bytes)
+    audio_file.name = f'audio.{ext}'
+
+    # get the transcription model from config
+    model = config.TRANSCRIBE_MODEL
+
+    # call transcription API
+    try:
+        logger.info(
+            f'Calling transcription API. Model: {model}, '
+            f'Language: {language or "auto"}, Format: {ext}'
+        )
+
+        # call the transcription model
+        response = await TRANSCRIBE_LLM.audio.transcriptions.create(
+            model=model,
+            file=audio_file,
+            response_format='json',
+            prompt=prompt or omit,
+            language=language or omit,
+        )
+
+        # log success and return
+        logger.info(
+            f'Transcription successful. Text length: {len(response.text)} chars'
+        )
+        return response.text
+
+    # error during transcription: log and raise
+    except Exception as e:
+        logger.error(
+            f'Transcription API call failed. Model: {model}, Error: {str(e)}'
+        )
+        raise TranscriptionError() from e
