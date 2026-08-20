@@ -37,6 +37,7 @@ class ExchangesRepository(BaseRepository):
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
 
+
     async def insert_exchange(self, exchange: Exchanges) -> Exchanges:
         """
         Insert a new exchange to database.
@@ -199,6 +200,7 @@ class ExchangesRepository(BaseRepository):
             # returns list of matching exchanges
             return list(result.scalars().all())
 
+
     async def update_classification(
         self,
         exchange_id: UUID,
@@ -245,3 +247,22 @@ class ExchangesRepository(BaseRepository):
 
             await session.commit()
 
+
+    async def delete_exchange(self, exchange_id: UUID) -> None:
+        """
+        Delete an exchange by id.
+
+        :param exchange_id: UUID of the exchange.
+
+        :returns: None.
+        """
+        # open database connection
+        async with self._session() as session:
+
+            # load the exchange into this session
+            exchange = await self._get(session, exchange_id)
+
+            # delete exchange from database
+            if exchange:
+                await session.delete(exchange)
+                await session.commit()
