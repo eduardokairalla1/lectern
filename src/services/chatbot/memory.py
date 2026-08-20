@@ -7,6 +7,7 @@ from langchain_core.runnables import Runnable
 from src.databases.redis import operations
 from src.services.chatbot.prompts import INITIAL_SUMMARY
 from src.services.chatbot.prompts import build_condense_prompt
+from src.services.chatbot.prompts import build_resume_prompt
 
 import json
 import logging
@@ -175,3 +176,41 @@ async def update_recent_interactions(
     await operations.set(_recent_key(session_id), data, TTL_SECONDS)
 
 
+async def update_summary(
+    llm: Runnable,
+    session_id: str,
+    user_input: str,
+    response: str
+) -> None:
+    """
+    Updates the conversation summary with the latest interaction.
+
+    :param llm: LLM runnable used to maintain the summary.
+    :param session_id: Conversation identifier.
+    :param user_input: Latest user message.
+    :param response: Assistant reply.
+
+    :returns: None.
+    """
+    # fetch the current summary and build the resume prompt
+    summary = await _get_summary(session_id)
+    prompt = build_resume_prompt(summary, user_input, response)
+
+    # run the LLM to regenerate the summary
+    try:
+        new_summary = (await llm.ainvoke(prompt)).content.strip()
+
+    # LLM fails: log a warning and raise the exception to retry
+    except Exception as e:
+        logger.warning(
+            f'[Memory] Failed to regenerate summary. '
+            f'Session: {session_id}, Error: {e}'
+        )
+        raise
+
+    # new summary exceeds the max length: condense it
+    if len(new_summary) > MAX_SUMMARY_CHARS:
+        new_summary = await _condense(llm, new_summary)
+
+    # store the new summary in Redis
+    await operations.set(_summary_key(session_id), new_summary, TTL_SECONDS)
