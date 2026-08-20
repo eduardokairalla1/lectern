@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+
+# lint: rules, import ordering, line length and quote style
+uv run ruff check src tests
+
+# check types
+uv run python -m mypy
+
+# run unit tests
+uv run python -m pytest tests/unit

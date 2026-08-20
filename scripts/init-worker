@@ -1,0 +1,7 @@
+#!/bin/bash
+set -e
+
+# run the worker
+echo "==> Starting worker..."
+exec celery -A src.worker.celery_app worker --loglevel=info \
+  --concurrency="${CELERY_CONCURRENCY:-2}"
