@@ -5,6 +5,7 @@ Path identifier validation.
 # --- IMPORTS ---
 from fastapi import Path
 from src.errors.invalid_request_error import InvalidRequestError
+from src.schemas.endpoints.chatbot_response import SESSION_ID_PATTERN
 from typing import Annotated
 
 import logging
@@ -42,3 +43,35 @@ def valid_exchange_id(
         raise InvalidRequestError() from e
 
     return exchangeId
+
+
+def valid_session_id(
+    sessionId: Annotated[
+        str,
+        Path(description='Conversation identifier, the same value used for '
+                         'its messages.',
+             examples=['a1b2c3d4e5f6']),
+    ],
+) -> str:
+    """
+    Validates the session identifier carried in the path.
+
+    The pattern is imported from the message payload rather than repeated:
+    a second copy could drift from the one that created the session.
+
+    :param sessionId: Identifier of the conversation being addressed.
+
+    :raises InvalidRequestError: If it does not match the allowed charset.
+
+    :return: The validated identifier.
+    """
+    # charset or length does not match: log and raise
+    if not SESSION_ID_PATTERN.fullmatch(sessionId):
+        logger.warning(
+            'Validation failed: Invalid sessionId. Length: %s, '
+            'must be 10-50 chars of [A-Za-z0-9_-]',
+            len(sessionId),
+        )
+        raise InvalidRequestError()
+
+    return sessionId

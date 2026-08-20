@@ -5,6 +5,7 @@ Unit tests for request schemas / validators.
 # --- IMPORTS ---
 from src.config import config
 from src.dependencies.identifiers import valid_exchange_id
+from src.dependencies.identifiers import valid_session_id
 from src.errors.invalid_request_error import InvalidRequestError
 from src.errors.payload_too_large_error import PayloadTooLargeError
 from src.schemas.endpoints.chatbot_response import ChatbotPayload
@@ -135,6 +136,11 @@ def test_session_id_invalid_characters_are_rejected(bad_session: str) -> None:
 def test_exchange_id_path_validator_rejects_a_non_uuid() -> None:
     with pytest.raises(InvalidRequestError):
         valid_exchange_id('not-a-uuid')
+
+
+def test_session_id_path_validator_rejects_an_invalid_charset() -> None:
+    with pytest.raises(InvalidRequestError):
+        valid_session_id('bad id!')
 
 # --- REPOSITORY ERROR MAPPING ---
 @pytest.mark.anyio
