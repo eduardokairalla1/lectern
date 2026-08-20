@@ -53,3 +53,23 @@ async def get(key: str) -> str | None:
             {'operation': 'get', 'key': key, 'error': str(e)}
         ) from e
 
+
+async def delete(*keys: str) -> None:
+    """
+    Removes one or more keys and their values permanently from Redis.
+
+    :param keys: The keys to delete.
+
+    :return: None
+    """
+    # delete keys
+    try:
+        await get_resources().redis_client.delete(*keys)
+        logger.debug('Deleted Redis keys: %s', keys)
+
+    # errors occurred: raise RedisUnavailableError with details
+    except Exception as e:
+        raise RedisUnavailableError(
+            {'operation': 'delete', 'key': keys, 'error': str(e)}
+        ) from e
+
