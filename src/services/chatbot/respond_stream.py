@@ -4,13 +4,19 @@ Streaming chatbot orchestration (SSE).
 
 # --- IMPORTS ---
 from collections.abc import AsyncGenerator
+from src.services.chatbot.events import classify_stream_error
 from src.services.chatbot.events import done_event
+from src.services.chatbot.events import error_event
 from src.services.chatbot.events import format_sse
+from src.services.chatbot.events import ready_event
 from src.services.chatbot.events import sanitize_output
 from src.services.chatbot.events import stream_end_event
 from src.services.chatbot.events import token_event
 from src.services.chatbot.persistence import schedule_cache_hit_persistence
 from src.services.chatbot.persistence import schedule_memory_update
+from src.services.chatbot.persistence import schedule_persistence
+from src.services.chatbot.pipeline import build_initial_state
+from src.services.chatbot.pipeline import elapsed_ms
 from src.services.chatbot.pipeline import prepare_state
 from src.services.chatbot.steps.stream_answer import stream_answer
 from src.services.chatbot.types import CachedResponse
@@ -19,6 +25,7 @@ from src.services.chatbot.types import State
 from src.services.chatbot.types import StreamEvent
 from uuid import uuid4
 
+import asyncio
 import logging
 
 
@@ -70,6 +77,94 @@ async def _execute_pipeline_streaming(
         response.category,
         state['exchangeId'],
     )
+
+
+async def _generate(
+    chat_message: ChatMessage,
+    request_ip: str | None,
+    user_agent: str | None,
+    message: str,
+    recent_interactions: list,
+    cached_response: CachedResponse | None,
+    start_time: float,
+) -> AsyncGenerator[str, None]:
+    """
+    Generate the streaming response, handling cached responses and errors.
+
+    :param chat_message: The resolved chat message input.
+    :param request_ip: Resolved client IP, for session/analytics tracking.
+    :param user_agent: Client user agent, for session/analytics tracking.
+    :param message: The resolved user message (after transcription, if any).
+    :param recent_interactions: The recent interactions for the session.
+    :param cached_response: The cached response, if any.
+    :param start_time: The timestamp when the request started.
+
+    :return: An async generator yielding SSE frames.
+    """
+    # yield the ready event and then stream the response
+    try:
+        yield format_sse(ready_event(chat_message.session_id))
+
+        # start timeout
+        async with asyncio.timeout(MAX_STREAM_TOTAL_DURATION_SECONDS):
+
+            # have a cached response: stream it and return immediately.
+            if cached_response:
+                async for frame in _stream_cached_response(chat_message,
+                                                           message,
+                                                           cached_response,
+                                                           request_ip,
+                                                           user_agent):
+                    yield frame
+                return
+
+            # build the initial state
+            state = build_initial_state(
+                chat_message.session_id, message, recent_interactions
+            )
+
+            # execute the pipeline with streaming
+            async for event in _execute_pipeline_streaming(state):
+                yield format_sse(event)
+
+            # stream errored: skip stats/cache
+            if state['response'] is None:
+                logger.warning(
+                    f'Chatbot stream ended with error; skipping '
+                    f'stats/cache. Session: {chat_message.session_id}'
+                )
+                return
+
+            # calculate duration
+            total_duration_ms = elapsed_ms(start_time)
+            logger.info(
+                f'Chatbot stream completed. '
+                f'Session: {chat_message.session_id}, '
+                f'Exchange: {state["exchangeId"]}, '
+                f'Duration: {total_duration_ms}ms'
+            )
+
+            # run persistence of the session and response
+            await schedule_persistence(
+                request_ip=request_ip,
+                user_agent=user_agent,
+                session_id=chat_message.session_id,
+                user_message=message,
+                response_state=state,
+                total_duration_ms=total_duration_ms,
+            )
+
+    # errors occurred during streaming: classify and yield an error event
+    except Exception as e:
+        code, msg = classify_stream_error(e)
+        logger.error(
+            f'Chatbot stream error ({code}). '
+            f'Session: {chat_message.session_id}, Error: {str(e)}',
+            exc_info=True,
+        )
+
+        # yield the error event to the client
+        yield format_sse(error_event(code, msg))
 
 
 async def _stream_cached_response(
