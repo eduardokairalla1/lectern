@@ -47,3 +47,13 @@ class ExecutionStats(TypedDict, total=False):
     output_tokens: int | None
     total_tokens: int | None
     total_duration_ms: int | None
+
+
+class TokenUsageByModel(TypedDict):
+    """
+    Aggregated token usage for a single LLM model.
+    """
+    llm_model: str
+    total_tokens: int
+    execution_count: int
+    avg_duration_ms: float

@@ -4,11 +4,13 @@ Executions table repository.
 
 # --- IMPORTS ---
 from sqlalchemy import desc
+from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from src.databases.relational.models.executions import Executions
 from src.databases.relational.setup.base_repository import BaseRepository
 from src.errors.already_exists_error import AlreadyExistsError
+from src.types.stats import TokenUsageByModel
 from uuid import UUID
 
 
@@ -144,4 +146,45 @@ class ExecutionsRepository(BaseRepository):
 
             # returns list of executions
             return list(result.scalars().all())
+
+
+    async def get_total_tokens_by_model(self) -> list[TokenUsageByModel]:
+        """
+        Get aggregated token usage grouped by LLM model.
+
+        :returns: List of dictionaries with model and total tokens.
+        """
+        # open database connection
+        async with self._session() as session:
+
+            # query aggregated data
+            stmt = (
+                select(
+                    Executions.llm_model,
+                    func.sum(Executions.total_tokens).label('total_tokens'),
+                    func.count(Executions.id).label('execution_count'),
+                    func.avg(Executions.total_duration_ms).label(
+                        'avg_duration_ms'
+                    ),
+                )
+                .where(Executions.llm_model.isnot(None))
+                .group_by(Executions.llm_model)
+            )
+
+            result = await session.execute(stmt)
+
+            # format results as list of dictionaries
+            return [
+                {
+                    'llm_model': row.llm_model,
+                    'total_tokens': int(row.total_tokens)
+                    if row.total_tokens
+                    else 0,
+                    'execution_count': row.execution_count,
+                    'avg_duration_ms': float(row.avg_duration_ms)
+                    if row.avg_duration_ms
+                    else 0.0,
+                }
+                for row in result.all()
+            ]
 
