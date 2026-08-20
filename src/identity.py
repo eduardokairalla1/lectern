@@ -3,9 +3,14 @@ The subject this instance speaks for.
 """
 
 # --- IMPORTS ---
+from functools import lru_cache
+from pathlib import Path
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from src.config import config
+
+import yaml
 
 
 # --- CODE ---
@@ -76,3 +81,38 @@ class Subject(BaseModel):
     model_config = ConfigDict(extra='allow')
 
     name: str
+
+
+class IdentityConfig(BaseModel):
+    """
+    Full contents of the identity file.
+    """
+    model_config = ConfigDict(extra='forbid')
+
+    identity: Subject
+    persona: Persona
+
+
+@lru_cache(maxsize=1)
+def get_identity() -> IdentityConfig:
+    """
+    Loads and validates the identity file.
+
+    Cached: the file is deployment configuration, read once per process.
+
+    :raises FileNotFoundError: If the configured file does not exist.
+
+    :return: The parsed identity configuration.
+    """
+    # get identity path
+    path = Path(config.IDENTITY_FILE)
+
+    # identity file does not exist: raise a FileNotFoundError
+    if not path.is_file():
+        raise FileNotFoundError(
+            f'Identity file not found at {path}. Copy '
+            f'identity.example.yaml and point IDENTITY_FILE at it.'
+        )
+
+    # load identity config and return
+    return IdentityConfig(**yaml.safe_load(path.read_text(encoding='utf-8')))
