@@ -3,6 +3,7 @@ Executions table repository.
 """
 
 # --- IMPORTS ---
+from sqlalchemy import desc
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from src.databases.relational.models.executions import Executions
@@ -96,5 +97,51 @@ class ExecutionsRepository(BaseRepository):
             result = await session.execute(stmt)
 
             # returns list of executions (empty when none exist)
+            return list(result.scalars().all())
+
+
+    async def list_executions(
+        self,
+        execution_type: str | None = None,
+        llm_model: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[Executions]:
+        """
+        List executions with optional filters.
+
+        :param execution_type: Filter by execution type (optional).
+        :param llm_model: Filter by LLM model (optional).
+        :param limit: Maximum number of results (default: 100).
+        :param offset: Number of results to skip (default: 0).
+
+        :returns: List of executions.
+        """
+        # open database connection
+        async with self._session() as session:
+
+            # build query
+            stmt = select(Executions)
+
+            # execution type filter is provided: apply it
+            if execution_type is not None:
+                stmt = stmt.where(
+                    Executions.execution_type == execution_type
+                )
+
+            # llm model filter is provided: apply it
+            if llm_model is not None:
+                stmt = stmt.where(Executions.llm_model == llm_model)
+
+            # order by most recent and apply pagination
+            stmt = (
+                stmt.order_by(desc(Executions.created_at))
+                .limit(limit)
+                .offset(offset)
+            )
+
+            result = await session.execute(stmt)
+
+            # returns list of executions
             return list(result.scalars().all())
 
