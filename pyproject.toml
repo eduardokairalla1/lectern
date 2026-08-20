@@ -1,6 +1,6 @@
 [project]
 name = "lectern"
-version = "0.0.0"
+version = "0.1.0"
 description = "Headless backend that turns a declared identity and its documents into a grounded conversational API"
 authors = [{ name = "Eduardo Kairalla" }]
 license = "Apache-2.0"
