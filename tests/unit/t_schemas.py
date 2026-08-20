@@ -1,8 +1,12 @@
 """
-Unit tests for how the repository layer types its failures.
+Unit tests for request schemas / validators.
 """
 
 # --- IMPORTS ---
+from src.config import config
+from src.errors.invalid_request_error import InvalidRequestError
+from src.errors.payload_too_large_error import PayloadTooLargeError
+from src.schemas.endpoints.chatbot_response import Message
 from typing import Any
 from typing import cast
 
@@ -24,6 +28,67 @@ class _FakeSessionMaker:
 
     def __call__(self) -> _FakeSession:
         return _FakeSession()
+# --- MESSAGE: content ---
+def test_text_message_valid() -> None:
+    message = Message(content='Oi, tudo bem?', messageType='text')
+    assert message.content == 'Oi, tudo bem?'
+    assert message.audioBase64 is None
+
+
+def test_content_at_300_chars_is_accepted() -> None:
+    Message(content='a' * 300, messageType='text')
+
+
+def test_content_over_300_chars_is_rejected() -> None:
+    with pytest.raises(InvalidRequestError):
+        Message(content='a' * 301, messageType='text')
+
+
+def test_empty_text_message_is_rejected() -> None:
+    # a text message with nothing to answer must not reach the LLM.
+    with pytest.raises(InvalidRequestError):
+        Message(content='', messageType='text')
+
+
+def test_whitespace_only_text_message_is_rejected() -> None:
+    with pytest.raises(InvalidRequestError):
+        Message(content='   \n\t ', messageType='text')
+
+
+# --- MESSAGE: messageType ---
+def test_unsupported_message_type_is_rejected() -> None:
+    with pytest.raises(InvalidRequestError):
+        Message(content='oi', messageType='video')
+
+
+def test_audio_message_with_base64_is_accepted() -> None:
+    message = Message(
+        content='', messageType='audio', audioBase64='ZmFrZSBhdWRpbw=='
+    )
+    assert message.messageType == 'audio'
+
+
+def test_audio_message_without_base64_is_rejected() -> None:
+    with pytest.raises(InvalidRequestError):
+        Message(content='', messageType='audio', audioBase64=None)
+
+
+def test_audio_base64_over_limit_is_rejected_as_too_large() -> None:
+    with pytest.raises(PayloadTooLargeError):
+        Message(
+            content='',
+            messageType='audio',
+            audioBase64='a' * (config.MAX_AUDIO_BASE64_SIZE + 1),
+        )
+
+
+def test_audio_base64_at_limit_is_accepted() -> None:
+    Message(
+        content='',
+        messageType='audio',
+        audioBase64='a' * config.MAX_AUDIO_BASE64_SIZE,
+    )
+
 # --- REPOSITORY ERROR MAPPING ---
 @pytest.mark.anyio
 async def test_constraint_violation_is_not_reported_as_unavailable() -> None:
