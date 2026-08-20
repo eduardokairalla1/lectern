@@ -78,6 +78,33 @@ async def _read_audio_duration(audio_bytes: bytes, ext: str) -> float:
         raise InvalidRequestError() from e
 
 
+async def _validate_audio_duration(audio_bytes: bytes, ext: str) -> None:
+    """
+    Validate the audio duration against the configured maximum.
+
+    :param audio_bytes: Decoded audio bytes.
+    :param ext: Audio format extension.
+
+    :raises InvalidRequestError: If the audio is too long or can't be read.
+
+    :return: None
+    """
+    # read the audio duration
+    duration_seconds = await _read_audio_duration(audio_bytes, ext)
+
+    # audio duration exceeds the maximum allowed: log and raise
+    if duration_seconds > config.MAX_AUDIO_DURATION_SECONDS:
+        logger.warning(
+            f'Transcription failed: Audio too long. '
+            f'Duration: {duration_seconds:.1f}s, '
+            f'Max: {config.MAX_AUDIO_DURATION_SECONDS}s'
+        )
+        raise InvalidRequestError()
+
+    # log the validated audio duration
+    logger.info(f'Audio duration validated: {duration_seconds:.1f}s')
+
+
 def decode_audio(media_base64: str) -> bytes:
     """
     Decode the base64 audio payload and validate the decoded size.
