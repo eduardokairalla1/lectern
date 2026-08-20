@@ -68,3 +68,48 @@ async def get_cached_response(query: str) -> CachedResponse | None:
         return None
 
 
+async def set_cached_response(
+    query: str,
+    response: str,
+    answered: bool,
+    category: str,
+    ttl: int = CACHE_TTL_SECONDS,
+) -> bool:
+    """
+    Caches a successful response. Unanswered responses are not cached.
+
+    :param query: User query.
+    :param response: Assistant response text.
+    :param answered: Whether the question was answered.
+    :param category: Response category.
+    :param ttl: Time-to-live in seconds.
+
+    :return: True if cached successfully, False otherwise.
+    """
+    # question was not answered: skip caching and return False
+    if not answered:
+        logger.debug('[Cache] Skipping unanswered question')
+        return False
+
+    # cache the response in Redis
+    try:
+        cached_response: CachedResponse = {
+            'response': response,
+            'answered': answered,
+            'category': category,
+        }
+        payload = json.dumps(cached_response, ensure_ascii=False)
+
+        # store the cached response
+        await operations.set(_cache_key(query), payload, ttl)
+        logger.debug('[Cache] Stored response (query %s chars)', len(query))
+
+        # return True on success
+        return True
+
+    # Redis is unavailable: log a warning and return False
+    except RedisUnavailableError as e:
+        logger.warning('[Cache] Error setting cache: %s', e.args)
+        return False
+
+
