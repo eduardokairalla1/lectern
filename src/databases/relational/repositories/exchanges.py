@@ -86,6 +86,7 @@ class ExchangesRepository(BaseRepository):
             # returns Exchange or None
             return await self._get(session, exchange_id)
 
+
     async def get_by_session_id(
         self, session_id: str, limit: int = 50, offset: int = 0
     ) -> list[Exchanges]:
@@ -106,6 +107,54 @@ class ExchangesRepository(BaseRepository):
                 select(Exchanges)
                 .where(Exchanges.session_id == session_id)
                 .order_by(desc(Exchanges.created_at))
+                .limit(limit)
+                .offset(offset)
+            )
+
+            result = await session.execute(stmt)
+
+            # returns list of exchanges
+            return list(result.scalars().all())
+
+    async def list_exchanges(
+        self,
+        topic_category: str | None = None,
+        was_answered_successfully: bool | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[Exchanges]:
+        """
+        List exchanges with optional filters.
+
+        :param topic_category: Filter by topic category (optional).
+        :param was_answered_successfully: Filter by answer success (optional).
+        :param limit: Maximum number of results (default: 100).
+        :param offset: Number of results to skip (default: 0).
+
+        :returns: List of exchanges.
+        """
+        # open database connection
+        async with self._session() as session:
+
+            # build query
+            stmt = select(Exchanges)
+
+            # topic category filter is provided: apply it
+            if topic_category is not None:
+                stmt = stmt.where(
+                    Exchanges.topic_category == topic_category
+                )
+
+            # was answered successfully filter is provided: apply it
+            if was_answered_successfully is not None:
+                stmt = stmt.where(
+                    Exchanges.was_answered_successfully
+                    == was_answered_successfully
+                )
+
+            # order by most recent and apply pagination
+            stmt = (
+                stmt.order_by(desc(Exchanges.created_at))
                 .limit(limit)
                 .offset(offset)
             )
