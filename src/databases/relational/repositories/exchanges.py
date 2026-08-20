@@ -4,6 +4,7 @@ Exchanges table repository.
 
 # --- IMPORTS ---
 from sqlalchemy import desc
+from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -116,6 +117,7 @@ class ExchangesRepository(BaseRepository):
             # returns list of exchanges
             return list(result.scalars().all())
 
+
     async def list_exchanges(
         self,
         topic_category: str | None = None,
@@ -162,5 +164,37 @@ class ExchangesRepository(BaseRepository):
             result = await session.execute(stmt)
 
             # returns list of exchanges
+            return list(result.scalars().all())
+
+    async def search_exchanges(
+        self, query: str, limit: int = 50
+    ) -> list[Exchanges]:
+        """
+        Full-text search over the exchange text (user message + assistant
+        response), using the GIN-indexed search_tsv generated column.
+
+        :param query: Free-text search terms.
+        :param limit: Maximum number of results.
+
+        :returns: Matching exchanges, newest first.
+        """
+        # open database connection
+        async with self._session() as session:
+
+            # match the tsvector column against the user's terms
+            stmt = (
+                select(Exchanges)
+                .where(
+                    Exchanges.search_tsv.op('@@')(
+                        func.plainto_tsquery('portuguese', query)
+                    )
+                )
+                .order_by(desc(Exchanges.created_at))
+                .limit(limit)
+            )
+
+            result = await session.execute(stmt)
+
+            # returns list of matching exchanges
             return list(result.scalars().all())
 
