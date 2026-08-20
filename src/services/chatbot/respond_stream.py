@@ -18,6 +18,7 @@ from src.services.chatbot.persistence import schedule_persistence
 from src.services.chatbot.pipeline import build_initial_state
 from src.services.chatbot.pipeline import elapsed_ms
 from src.services.chatbot.pipeline import prepare_state
+from src.services.chatbot.pipeline import resolve_request_context
 from src.services.chatbot.steps.stream_answer import stream_answer
 from src.services.chatbot.types import CachedResponse
 from src.services.chatbot.types import ChatMessage
@@ -27,6 +28,7 @@ from uuid import uuid4
 
 import asyncio
 import logging
+import time
 
 
 # --- GLOBALS ---
@@ -231,3 +233,41 @@ async def _stream_cached_response(
     )
 
 
+async def respond_stream(
+    chat_message: ChatMessage,
+    request_ip: str | None,
+    user_agent: str | None,
+) -> AsyncGenerator[str, None]:
+    """
+    Prepares the streaming response and returns the SSE generator.
+
+    :param chat_message: The resolved chat message input.
+    :param request_ip: Resolved client IP, for session/analytics tracking.
+    :param user_agent: Client user agent, for session/analytics tracking.
+
+    :return: An async generator yielding SSE frames.
+    """
+    # start timing
+    start_time = time.time()
+
+    logger.info(
+        f'Chatbot stream request started. '
+        f'Session: {chat_message.session_id}, '
+        f'Type: {chat_message.message_type}'
+    )
+
+    # resolve the request context
+    (message,
+     recent_interactions,
+     cached_response) = await resolve_request_context(chat_message)
+
+    # return the generator for the streaming response
+    return _generate(
+        chat_message,
+        request_ip,
+        user_agent,
+        message,
+        recent_interactions,
+        cached_response,
+        start_time,
+    )
