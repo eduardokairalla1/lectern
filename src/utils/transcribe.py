@@ -6,8 +6,11 @@ Audio transcription helper.
 from src.config import config
 from src.errors.invalid_request_error import InvalidRequestError
 from src.errors.payload_too_large_error import PayloadTooLargeError
+from src.errors.processing_error import ProcessingError
 from src.errors.unsupported_media_type_error import UnsupportedMediaTypeError
+from tempfile import NamedTemporaryFile
 
+import asyncio
 import base64
 import filetype
 import logging
@@ -18,6 +21,63 @@ logger = logging.getLogger(__name__)
 
 
 # --- CODE ---
+async def _read_audio_duration(audio_bytes: bytes, ext: str) -> float:
+    """
+    Read the audio duration from the container metadata, using ffprobe.
+
+    :param audio_bytes: Decoded audio bytes.
+    :param ext: Audio format extension.
+
+    :raises ProcessingError: If ffprobe is missing from the host.
+    :raises InvalidRequestError: If the audio can't be read.
+
+    :return: Audio duration in seconds.
+    """
+    # write the audio bytes to a temporary file with the correct extension
+    with NamedTemporaryFile(suffix=f'.{ext}') as tmp:
+
+        # writing a multi-MB payload is blocking: keep it off the event loop
+        await asyncio.to_thread(tmp.write, audio_bytes)
+        tmp.flush()
+
+        # ask ffprobe for the duration alone
+        try:
+            process = await asyncio.create_subprocess_exec(
+                'ffprobe',
+                '-v', 'error',
+                '-show_entries', 'format=duration',
+                '-of', 'default=noprint_wrappers=1:nokey=1',
+                tmp.name,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
+
+        # ffprobe is not installed: log and raise
+        except FileNotFoundError as e:
+            logger.error('Audio duration check failed: ffprobe not found.')
+            raise ProcessingError({'error': 'ffprobe is not available'}) from e
+
+    # ffprobe rejected the file: it is corrupt or not really audio
+    if process.returncode != 0:
+        logger.error(
+            f'Transcription failed: unreadable audio. '
+            f'ffprobe: {stderr.decode().strip()}'
+        )
+        raise InvalidRequestError()
+
+    # parse the duration from ffprobe's output
+    try:
+        return float(stdout.decode().strip())
+
+    # ffprobe output is not a valid float: log and raise
+    except ValueError as e:
+        logger.error(
+            f'Transcription failed: audio carries no duration ({ext}).'
+        )
+        raise InvalidRequestError() from e
+
+
 def decode_audio(media_base64: str) -> bytes:
     """
     Decode the base64 audio payload and validate the decoded size.
