@@ -36,6 +36,10 @@ def _render(template: str) -> str:
 
 
 # --- GLOBALS ---
+# initial summary for a new conversation (no prior context)
+INITIAL_SUMMARY = 'This is the beginning of the conversation. No prior context.'
+
+
 # transcription prompt for audio messages
 TRANSCRIPTION_TEMPLATE = """
 Voice message for an assistant that answers about [[subject]]. The user may
