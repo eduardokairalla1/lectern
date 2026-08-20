@@ -4,8 +4,11 @@ Chabot persistence functions
 
 # --- IMPORTS ---
 from src.config import config
+from src.services.chatbot import memory
 from src.services.chatbot.types import Execution
+from src.tasks.chatbot import save_memory
 from src.types.stats import ExecutionStats
+from src.utils.dispatch import dispatch_task
 
 import logging
 
@@ -55,5 +58,30 @@ def _build_execution_stats(
         )
 
     return stats
+
+
+async def schedule_memory_update(
+    session_id: str, user_message: str, assistant_response: str
+) -> None:
+    """
+    Updates the recent-interactions memory and enqueues the
+    summary regeneration.
+
+    :param session_id: Conversation identifier.
+    :param user_message: Resolved user message.
+    :param assistant_response: Assistant response to persist.
+
+    :returns: None.
+    """
+    await memory.update_recent_interactions(
+        session_id, user_message, assistant_response
+    )
+
+    dispatch_task(
+        save_memory,
+        session_id=session_id,
+        user_message=user_message,
+        assistant_response=assistant_response,
+    )
 
 
