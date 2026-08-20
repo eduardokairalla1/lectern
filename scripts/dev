@@ -1,0 +1,20 @@
+#!/bin/bash
+set -e
+
+# worker mode is requested: start the worker
+if [ "$1" = "--worker" ]; then
+  echo "==> Starting worker (development)..."
+  exec uv run python -m celery -A src.worker.celery_app worker \
+    --loglevel=info --pool=solo
+fi
+
+# any other arguments are passed: show usage and exit
+if [ -n "$1" ]; then
+  echo "usage: scripts/dev [--worker]" >&2
+  exit 64
+fi
+
+# start development server
+echo "==> Starting server (development)..."
+exec uv run python -m uvicorn --app-dir src --host "${BIND:-0.0.0.0}" \
+  --port "${PORT:-8000}" --reload main:app
