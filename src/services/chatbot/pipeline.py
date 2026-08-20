@@ -14,6 +14,8 @@ from src.services.chatbot import memory
 from src.services.chatbot.message import resolve_message
 from src.services.chatbot.types import CachedResponse
 from src.services.chatbot.types import ChatMessage
+from src.services.chatbot.types import State
+from uuid import uuid4
 
 import asyncio
 import time
@@ -59,5 +61,32 @@ async def resolve_request_context(
 
     # return the resolved message, recent interactions and cached response
     return message, recent_interactions, cached_response
+
+
+def build_initial_state(
+    session_id: str,
+    message: str,
+    recent_interactions: list[tuple[str, str]],
+) -> State:
+    """
+    Builds the initial State for the chatbot pipeline.
+
+    :param session_id: Conversation identifier.
+    :param message: Resolved user message.
+    :param recent_interactions: Pre-fetched recent interactions.
+
+    :return: The initial State for the pipeline.
+    """
+    return {
+        'sessionId': session_id,
+        'exchangeId': str(uuid4()),
+        'context': '',
+        'rewrittenQuery': '',
+        'recentInteractions': recent_interactions,
+        'memoryText': '',
+        'message': message,
+        'response': None,
+        'execution': [],
+    }
 
 
