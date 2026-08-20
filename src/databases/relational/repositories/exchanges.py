@@ -166,6 +166,7 @@ class ExchangesRepository(BaseRepository):
             # returns list of exchanges
             return list(result.scalars().all())
 
+
     async def search_exchanges(
         self, query: str, limit: int = 50
     ) -> list[Exchanges]:
@@ -197,4 +198,50 @@ class ExchangesRepository(BaseRepository):
 
             # returns list of matching exchanges
             return list(result.scalars().all())
+
+    async def update_classification(
+        self,
+        exchange_id: UUID,
+        was_answered_successfully: bool | None = None,
+        topic_category: str | None = None,
+    ) -> None:
+        """
+        Update the classification fields of an exchange.
+
+        :param exchange_id: UUID of the exchange.
+        :param was_answered_successfully: Whether the AI answered
+            adequately (optional).
+        :param topic_category: Topic category (optional).
+
+        :returns: None.
+        """
+        # build update dictionary with only provided values
+        update_values = {
+            field: value
+            for field, value in {
+                'was_answered_successfully': was_answered_successfully,
+                'topic_category': topic_category,
+            }.items()
+            if value is not None
+        }
+
+        # nothing to update: skip the query entirely
+        if not update_values:
+            return
+
+        # open database connection
+        async with self._session() as session:
+
+            # load the exchange into this session
+            exchange = await self._get(session, exchange_id)
+
+            # exchange does not exist: nothing to update
+            if exchange is None:
+                return
+
+            # apply the provided values and commit
+            for key, value in update_values.items():
+                setattr(exchange, key, value)
+
+            await session.commit()
 
