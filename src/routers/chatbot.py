@@ -9,6 +9,7 @@ from fastapi import Request
 from fastapi.responses import StreamingResponse
 from src.dependencies.auth import verify_api_key
 from src.dependencies.client_info import get_client_ip
+from src.dependencies.identifiers import valid_exchange_id
 from src.errors.database_unavailable_error import DatabaseUnavailableError
 from src.errors.invalid_request_error import InvalidRequestError
 from src.errors.payload_too_large_error import PayloadTooLargeError
@@ -20,14 +21,18 @@ from src.errors.unsupported_media_type_error import UnsupportedMediaTypeError
 from src.errors.vector_store_unavailable_error import (
     VectorStoreUnavailableError,
 )
+from src.schemas.endpoints.chatbot_feedback import FeedbackPayload
+from src.schemas.endpoints.chatbot_feedback import FeedbackResponse
 from src.schemas.endpoints.chatbot_response import ChatbotPayload
 from src.schemas.endpoints.chatbot_response import ChatbotResponse
 from src.schemas.errors import VALIDATION_RESPONSE
 from src.schemas.errors import error_responses
+from src.services.chatbot.persistence import schedule_feedback
 from src.services.chatbot.respond import respond
 from src.services.chatbot.respond_stream import respond_stream
 from src.services.chatbot.types import ChatbotResult
 from src.services.chatbot.types import ChatMessage
+from typing import Annotated
 
 
 # --- GLOBAL ---
@@ -142,5 +147,44 @@ async def chatbot_stream_endpoint(
             'X-Accel-Buffering': 'no',
         },
     )
+
+
+@router.post('/feedback/exchange/{exchangeId}',
+             summary='Rate an answer',
+             status_code=202,
+             response_model=FeedbackResponse,
+             responses={
+                 **error_responses(
+                     InvalidRequestError,
+                     UnauthorizedError,
+                     ProcessingError,
+                 ),
+                 **VALIDATION_RESPONSE,
+             },
+             dependencies=[Depends(verify_api_key)])
+async def chatbot_feedback_endpoint(
+    exchange_id: Annotated[str, Depends(valid_exchange_id)],
+    payload: FeedbackPayload,
+) -> FeedbackResponse:
+    """
+    Records a visitor's rating of one previous answer.
+
+    The exchange is the one the answer returned. Rates a single answer; use
+    `POST /api/chatbot/feedback/session/{sessionId}` to rate the conversation
+    as a whole. The two are independent, and a client may send either, both,
+    or neither.
+
+    Sending feedback twice for the same exchange updates the previous rating
+    instead of adding a second one.
+
+    Responds `202 Accepted`: the rating is persisted by a background worker,
+    so a successful response means it was accepted, not yet stored.
+    """
+    schedule_feedback(
+        exchange_id=exchange_id,
+        rating=payload.rating,
+        comment=payload.comment,
+    )
+    return FeedbackResponse(status='accepted')
 
 
