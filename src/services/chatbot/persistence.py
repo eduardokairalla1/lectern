@@ -12,6 +12,7 @@ from src.tasks.chatbot import save_cache_response
 from src.tasks.chatbot import save_exchange_stats
 from src.tasks.chatbot import save_feedback
 from src.tasks.chatbot import save_memory
+from src.tasks.chatbot import save_session_feedback
 from src.types.stats import ExchangeStats
 from src.types.stats import ExecutionStats
 from src.types.stats import SessionStats
@@ -133,6 +134,28 @@ def schedule_cache_hit_persistence(
         session_data=session_data,
         exchange_data=exchange_data,
         executions=[],
+    )
+
+
+def schedule_session_feedback(
+    session_id: str,
+    score: int,
+    comment: str | None = None
+) -> None:
+    """
+    Enqueues the upsert of a visitor's rating of a whole conversation.
+
+    :param session_id: Client session identifier.
+    :param score: Visitor rating of the conversation, from 0 to 10.
+    :param comment: Optional free-text note.
+
+    :returns: None.
+    """
+    dispatch_task(
+        save_session_feedback,
+        session_id=session_id,
+        score=score,
+        comment=comment,
     )
 
 
