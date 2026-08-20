@@ -10,6 +10,7 @@ from src.services.chatbot.types import Execution
 from src.services.chatbot.types import State
 from src.tasks.chatbot import save_cache_response
 from src.tasks.chatbot import save_exchange_stats
+from src.tasks.chatbot import save_feedback
 from src.tasks.chatbot import save_memory
 from src.types.stats import ExchangeStats
 from src.types.stats import ExecutionStats
@@ -64,6 +65,28 @@ def _build_execution_stats(
         )
 
     return stats
+
+
+def schedule_feedback(
+    exchange_id: str,
+    rating: str,
+    comment: str | None = None
+) -> None:
+    """
+    Enqueues the upsert of a visitor feedback.
+
+    :param exchange_id: UUID (string) of the rated exchange.
+    :param rating: Visitor rating: 'up' or 'down'.
+    :param comment: Optional free-text comment.
+
+    :returns: None.
+    """
+    dispatch_task(
+        save_feedback,
+        exchange_id=exchange_id,
+        rating=rating,
+        comment=comment,
+    )
 
 
 def schedule_cache_hit_persistence(
