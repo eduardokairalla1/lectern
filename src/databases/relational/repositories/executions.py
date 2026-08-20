@@ -72,3 +72,29 @@ class ExecutionsRepository(BaseRepository):
             # returns Execution or None
             return result.scalar_one_or_none()
 
+
+    async def get_by_exchange_id(
+        self, exchange_id: UUID
+    ) -> list[Executions]:
+        """
+        Retrieves every execution of an exchange (an exchange has several:
+        query rewrite, answer, metadata extraction), in chronological order.
+
+        :param exchange_id: UUID of the exchange.
+
+        :returns: List of executions (empty when none exist).
+        """
+        # open database connection
+        async with self._session() as session:
+
+            # retrieves executions by exchange_id from database
+            stmt = (
+                select(Executions)
+                .where(Executions.exchange_id == exchange_id)
+                .order_by(Executions.created_at)
+            )
+            result = await session.execute(stmt)
+
+            # returns list of executions (empty when none exist)
+            return list(result.scalars().all())
+
