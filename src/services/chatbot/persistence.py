@@ -5,6 +5,7 @@ Chabot persistence functions
 # --- IMPORTS ---
 from src.config import config
 from src.services.chatbot import memory
+from src.services.chatbot.types import CachedResponse
 from src.services.chatbot.types import Execution
 from src.services.chatbot.types import State
 from src.tasks.chatbot import save_cache_response
@@ -63,6 +64,53 @@ def _build_execution_stats(
         )
 
     return stats
+
+
+def schedule_cache_hit_persistence(
+    exchange_id: str,
+    session_id: str,
+    user_message: str,
+    cached_response: CachedResponse,
+    request_ip: str | None,
+    user_agent: str | None,
+) -> None:
+    """
+    Persists an exchange that was answered from the response cache.
+
+    :param exchange_id: Identifier generated for this exchange.
+    :param session_id: Conversation identifier.
+    :param user_message: Resolved user message.
+    :param cached_response: The cached payload that answered it.
+    :param request_ip: Resolved client IP, for session/analytics tracking.
+    :param user_agent: Client user agent, for session/analytics tracking.
+
+    :returns: None.
+    """
+    # build the session and exchange stats
+    session_data: SessionStats = {
+        'id': session_id,
+        'request_ip': request_ip,
+        'user_agent': user_agent,
+    }
+
+    exchange_data: ExchangeStats = {
+        'id': exchange_id,
+        'session_id': session_id,
+        'user_message': user_message,
+        'assistant_response': cached_response['response'],
+        'was_answered_successfully': cached_response.get('answered', True),
+        'topic_category': cached_response.get('category'),
+        'request_ip': request_ip,
+        'served_from_cache': True,
+    }
+
+    # dispatch the persistence tasks
+    dispatch_task(
+        save_exchange_stats,
+        session_data=session_data,
+        exchange_data=exchange_data,
+        executions=[],
+    )
 
 
 async def schedule_memory_update(
