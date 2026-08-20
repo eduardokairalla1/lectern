@@ -9,6 +9,9 @@ Redis/Qdrant/engine: no real infrastructure needed.
 # --- IMPORTS ---
 from collections.abc import AsyncIterator
 from collections.abc import Iterator
+from fastapi.testclient import TestClient
+from src.app import app
+from src.config import config
 from src.resources import Resources
 from src.resources import set_resources
 from typing import Any
@@ -16,6 +19,9 @@ from typing import cast
 
 import fnmatch
 import pytest
+
+# wires routes, middleware and the lifespan onto the app (side-effect import).
+import src.main  # noqa: F401
 
 
 # --- ASYNC BACKEND ---
@@ -135,3 +141,36 @@ def resources(fake_redis: FakeRedis) -> Iterator[Resources]:
     yield container
     set_resources(None)
 
+
+# --- HTTP CLIENT ---
+@pytest.fixture
+def client(resources: Resources) -> Iterator[TestClient]:
+    """
+    TestClient running the full app lifespan against fake resources.
+    """
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+# --- HELPERS ---
+@pytest.fixture
+def auth_headers() -> dict[str, str]:
+    """Headers carrying the configured API key."""
+    return {'x-api-key': config.API_KEY}
+
+
+def chat_payload(
+    message: str = 'Voce conhece Python?',
+    session_id: str = 'test-session-123',
+    message_type: str = 'text',
+    audio_base64: str | None = None,
+) -> dict:
+    """Builds a valid /chatbot payload (override fields to break it)."""
+    return {
+        'sessionId': session_id,
+        'message': {
+            'content': message,
+            'messageType': message_type,
+            'audioBase64': audio_base64,
+        },
+    }
