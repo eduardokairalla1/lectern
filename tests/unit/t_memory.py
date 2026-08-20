@@ -19,3 +19,18 @@ class TestKeys:
         assert 's-1' in memory._recent_key('s-1')
 
 
+class TestFormat:
+
+    def test_returns_the_summary_alone_without_interactions(self) -> None:
+        assert memory._format('summary', []) == 'summary'
+
+    def test_appends_numbered_interactions(self) -> None:
+        formatted = memory._format('summary', [('q1', 'a1'), ('q2', 'a2')])
+        assert 'Question 1: q1' in formatted
+        assert 'AI Response 2: a2' in formatted
+
+    def test_keeps_the_summary_first(self) -> None:
+        formatted = memory._format('summary', [('q', 'a')])
+        assert formatted.startswith('summary')
+
+

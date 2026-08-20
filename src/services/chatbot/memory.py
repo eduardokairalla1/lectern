@@ -40,3 +40,28 @@ def _recent_key(session_id: str) -> str:
     return f'memory:{session_id}:recent'
 
 
+def _format(summary: str, recent: list[tuple[str, str]]) -> str:
+    """
+    Formats the conversation summary with recent interactions.
+
+    :param summary: The conversation summary.
+    :param recent: Recent interactions, as a list of (user_input, response).
+
+    :return: The formatted conversation summary with recent interactions.
+    """
+    # no recent interactions: return the summary as-is
+    if not recent:
+        return summary
+
+    # format the recent interactions as a list of lines
+    lines = ['Recent interactions:']
+
+    # append each recent interaction as a numbered pair of lines
+    for i, (inp, resp) in enumerate(recent, 1):
+        lines.append(f'Question {i}: {inp}')
+        lines.append(f'AI Response {i}: {resp}')
+
+    # return the summary followed by the recent interactions
+    return f'{summary}\n\n' + '\n'.join(lines)
+
+
