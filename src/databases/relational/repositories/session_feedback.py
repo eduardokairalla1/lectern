@@ -65,3 +65,28 @@ class SessionFeedbackRepository(BaseRepository):
             # commit changes
             await session.commit()
 
+
+    async def list_by_session_id(
+        self,
+        session_id: str
+    ) -> list[SessionFeedback]:
+        """
+        Retrieves every rating a conversation collected, oldest first.
+
+        :param session_id: Client session identifier.
+
+        :returns: The session's ratings, in chronological order.
+        """
+        # open database connection
+        async with self._session() as session:
+
+            # retrieve every rating of the session, oldest first
+            stmt = (
+                select(SessionFeedback)
+                .where(SessionFeedback.session_id == session_id)
+                .order_by(SessionFeedback.message_count)
+            )
+            result = await session.execute(stmt)
+
+            # returns the ratings in chronological order
+            return list(result.scalars().all())
