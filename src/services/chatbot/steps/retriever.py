@@ -4,6 +4,9 @@ Retrieve documents step.
 
 # --- IMPORTS ---
 from langchain_core.documents import Document
+from src.databases.vector import operations
+from src.errors.processing_error import ProcessingError
+from src.services.chatbot.types import State
 from src.types.documents import RetrievedDocument
 
 import logging
@@ -142,3 +145,59 @@ def format_documents(docs: list[Document]) -> str:
     return '\n\n'.join(formatted)
 
 
+async def retriever(state: State) -> State:
+    """
+    Retrieve relevant documents from the vector store and update the state.
+
+    :param state: The current state of the chatbot session.
+
+    :return: The updated state, with the 'context' field containing the
+        formatted documents.
+    """
+    # get the query
+    query = state.get('rewrittenQuery') or state['message']
+
+    logger.debug(
+        f'[Step: retriever] Searching ({len(query)} chars). '
+        f'Exchange: {state["exchangeId"]}'
+    )
+
+    # retrieve documents from the vector store
+    docsWithScores = await operations.search(
+        query=query,
+        limit=MAX_DOCUMENTS + 2
+    )
+
+    # process the retrieved documents
+    try:
+
+        # filter by score threshold and deduplicate
+        accepted = _filter_documents(docsWithScores, state['sessionId'])
+        filteredDocs = [doc for doc, _ in accepted]
+
+        # update the 'context' field with formatted text
+        state['context'] = format_documents(filteredDocs)
+
+        # save raw docs with scores
+        state['retrievedDocuments'] = [
+            _to_retrieved_document(doc, score, i)
+            for i, (doc, score) in enumerate(accepted, 1)
+        ]
+
+    # unexpected error while processing the documents: raise a 500 error
+    except Exception as e:
+        logger.error(
+            f'[Step: retriever] Document processing error. '
+            f'Exchange: {state["exchangeId"]}, Error: {str(e)}',
+            exc_info=True,
+        )
+        raise ProcessingError({'error': str(e)}) from e
+
+    logger.info(
+        f'[Step: retriever] Retrieved {len(filteredDocs)} documents '
+        f'(filtered from {len(docsWithScores)}). '
+        f'Session: {state["sessionId"]}'
+    )
+
+    # return the updated state with the new context
+    return state
