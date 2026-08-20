@@ -173,6 +173,17 @@ async def test_unexpected_database_error_is_reported_as_unavailable() -> None:
     with pytest.raises(DatabaseUnavailableError):
         async with repository._session():
             raise ConnectionError('server closed the connection')
+
+
+def test_integrity_violations_are_excluded_from_task_retries() -> None:
+    """Celery retries every Exception; a constraint violation replays the
+    same rejected row, so it has to be excluded explicitly."""
+    from src.errors.data_integrity_error import DataIntegrityError
+    from src.tasks.chatbot.config import RETRY_OPTIONS
+
+    assert DataIntegrityError in RETRY_OPTIONS['dont_autoretry_for']
+
+
 def test_broker_publishing_is_bounded_by_a_timeout() -> None:
     """dispatch_task swallows exceptions, but it cannot swallow a hang: a
     broker that accepts the connection and never answers would block the
