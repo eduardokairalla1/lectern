@@ -6,8 +6,13 @@ Chabot persistence functions
 from src.config import config
 from src.services.chatbot import memory
 from src.services.chatbot.types import Execution
+from src.services.chatbot.types import State
+from src.tasks.chatbot import save_cache_response
+from src.tasks.chatbot import save_exchange_stats
 from src.tasks.chatbot import save_memory
+from src.types.stats import ExchangeStats
 from src.types.stats import ExecutionStats
+from src.types.stats import SessionStats
 from src.utils.dispatch import dispatch_task
 
 import logging
@@ -85,3 +90,83 @@ async def schedule_memory_update(
     )
 
 
+async def schedule_persistence(
+    request_ip: str | None,
+    user_agent: str | None,
+    session_id: str,
+    user_message: str,
+    response_state: State,
+    total_duration_ms: int,
+) -> None:
+    """
+    Enqueues the persistence of the session, exchange, and execution stats.
+
+    :param request_ip: Resolved client IP, for session/analytics tracking.
+    :param user_agent: Client user agent, for session/analytics tracking.
+    :param session_id: Conversation identifier.
+    :param user_message: Resolved user message.
+    :param response_state: Final state after the pipeline ran.
+    :param total_duration_ms: Total request duration in milliseconds.
+
+    :returns: None.
+    """
+    # extract the response from the state
+    result = response_state['response']
+
+    # response is None: log an error and skip persistence
+    if result is None:
+        logger.error(
+            '[Persistence] Missing response in state; skipping. '
+            f'Session: {session_id}'
+        )
+        return
+
+    # response was not correctly answered: log a warning
+    if not result.answered:
+        logger.warning(
+            f'Unanswered question. Session: {session_id}, '
+            f'Exchange: {response_state["exchangeId"]}'
+        )
+
+    # build the session
+    session_data: SessionStats = {
+        'id': session_id,
+        'request_ip': request_ip,
+        'user_agent': user_agent,
+    }
+
+    # build the exchange
+    exchange_data: ExchangeStats = {
+        'id': response_state['exchangeId'],
+        'session_id': session_id,
+        'user_message': user_message,
+        'assistant_response': result.response,
+        'rewritten_query': response_state.get('rewrittenQuery'),
+        'retrieved_documents': response_state.get('retrievedDocuments', []),
+        'memory_summary': response_state.get('memoryText'),
+        'was_answered_successfully': result.answered,
+        'topic_category': result.category,
+        'request_ip': request_ip,
+        'served_from_cache': False,
+    }
+
+    # dispatch the persistence tasks
+    dispatch_task(
+        save_exchange_stats,
+        session_data=session_data,
+        exchange_data=exchange_data,
+        executions=_build_execution_stats(response_state.get('execution', []),
+                                          total_duration_ms),
+    )
+
+    # dispatch the cache save task
+    dispatch_task(
+        save_cache_response,
+        query=user_message,
+        response=result.response,
+        answered=result.answered,
+        category=result.category,
+    )
+
+    # update the conversation memory
+    await schedule_memory_update(session_id, user_message, result.response)
