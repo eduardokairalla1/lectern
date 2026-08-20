@@ -3,11 +3,14 @@ Server-Sent Events (SSE) for the chatbot.
 """
 
 # --- IMPORTS ---
+from src.errors.backend_error import BackendError
 from src.services.chatbot.types import StreamErrorCode
 from src.services.chatbot.types import StreamEvent
 
+import asyncio
 import html
 import json
+import openai
 import re
 
 
@@ -111,3 +114,69 @@ def format_sse(event: StreamEvent) -> str:
     return f'data: {json.dumps(event)}\n\n'
 
 
+# --- ERROR CLASSIFICATION ---
+# Ordered lookup table: the FIRST matching exception type wins, so more
+# specific types must come before their base classes (e.g. APITimeoutError
+# and RateLimitError before APIError). BackendError covers step-level
+# failures (e.g. vector store/DB).
+_STREAM_ERROR_TABLE: tuple[
+    tuple[tuple[type[BaseException], ...], tuple[StreamErrorCode, str]], ...
+] = (
+    (
+        (asyncio.TimeoutError, openai.APITimeoutError),
+        ('timeout', 'The response took too long. Please try again.'),
+    ),
+    (
+        (openai.RateLimitError,),
+        (
+            'rate_limit',
+            "I'm receiving a lot of requests right now. "
+            'Please try again in a moment.',
+        ),
+    ),
+    (
+        (openai.AuthenticationError,),
+        (
+            'auth',
+            'The assistant is temporarily unavailable. Please try again later.',
+        ),
+    ),
+    (
+        (openai.APIConnectionError, openai.APIError),
+        (
+            'unavailable',
+            'The assistant is temporarily unavailable. '
+            'Please try again shortly.',
+        ),
+    ),
+    (
+        (BackendError,),
+        (
+            'unavailable',
+            'The assistant is temporarily unavailable. '
+            'Please try again shortly.',
+        ),
+    ),
+)
+_UNKNOWN_STREAM_ERROR: tuple[StreamErrorCode, str] = (
+    'unknown',
+    'Something went wrong while processing your request. Please try again.',
+)
+
+
+def classify_stream_error(
+    exc: Exception,
+) -> tuple[StreamErrorCode, str]:
+    """Map an exception to a stable (error_code, user-facing message).
+
+    The message is a neutral English default; the client should localize
+    based on `error_code`. Never leak internal details to the user.
+    """
+    return next(
+        (
+            result
+            for exc_types, result in _STREAM_ERROR_TABLE
+            if isinstance(exc, exc_types)
+        ),
+        _UNKNOWN_STREAM_ERROR,
+    )

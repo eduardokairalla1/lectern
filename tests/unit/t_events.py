@@ -3,6 +3,10 @@ Unit tests for the SSE event constructors and error classification.
 """
 
 # --- IMPORTS ---
+from src.errors.vector_store_unavailable_error import (
+    VectorStoreUnavailableError,
+)
+from src.services.chatbot.events import classify_stream_error
 from src.services.chatbot.events import done_event
 from src.services.chatbot.events import error_event
 from src.services.chatbot.events import format_sse
@@ -12,7 +16,19 @@ from src.services.chatbot.events import stream_end_event
 from src.services.chatbot.events import strip_meta_artifacts
 from src.services.chatbot.events import token_event
 
+import httpx
 import json
+import openai
+import pytest
+
+
+# --- HELPERS ---
+def _openai_error(cls: type, status: int) -> openai.APIStatusError:
+    """Builds a real provider error, since the table matches on its type."""
+    request = httpx.Request('POST', 'https://api.openai.com/v1/chat')
+    return cls(
+        'boom', response=httpx.Response(status, request=request), body=None
+    )
 
 
 # --- OUTPUT SANITIZATION ---
@@ -98,3 +114,41 @@ class TestFormatSse:
         assert json.loads(frame.removeprefix('data: '))['content'] == 'ação 😄'
 
 
+# --- ERROR CLASSIFICATION ---
+class TestClassifyStreamError:
+
+    @pytest.mark.parametrize(
+        ('error', 'code'),
+        [
+            (TimeoutError(), 'timeout'),
+            (VectorStoreUnavailableError(), 'unavailable'),
+            (RuntimeError('unmapped'), 'unknown'),
+        ],
+    )
+    def test_maps_the_error_to_its_code(
+        self, error: Exception, code: str
+    ) -> None:
+        assert classify_stream_error(error)[0] == code
+
+    @pytest.mark.parametrize(
+        ('cls', 'status', 'code'),
+        [
+            (openai.RateLimitError, 429, 'rate_limit'),
+            (openai.AuthenticationError, 401, 'auth'),
+        ],
+    )
+    def test_maps_provider_errors_by_type(
+        self, cls: type, status: int, code: str
+    ) -> None:
+        error = _openai_error(cls, status)
+        assert classify_stream_error(error)[0] == code
+
+    def test_the_specific_type_wins_over_its_base(self) -> None:
+        # RateLimitError is an APIError; the table is ordered so the narrower
+        # entry matches first
+        error = _openai_error(openai.RateLimitError, 429)
+        assert classify_stream_error(error)[0] != 'unavailable'
+
+    def test_the_message_never_leaks_internals(self) -> None:
+        _, message = classify_stream_error(RuntimeError('db password is 123'))
+        assert '123' not in message
