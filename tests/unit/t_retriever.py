@@ -8,6 +8,7 @@ from src.services.chatbot.steps.retriever import MAX_DOCUMENTS
 from src.services.chatbot.steps.retriever import SCORE_THRESHOLD
 from src.services.chatbot.steps.retriever import _clean_text
 from src.services.chatbot.steps.retriever import _filter_documents
+from src.services.chatbot.steps.retriever import _to_retrieved_document
 
 
 # --- HELPERS ---
@@ -72,5 +73,32 @@ class TestFilterDocuments:
         pairs = [(_doc(text='first'), 0.9), (_doc(text='second'), 0.4)]
         accepted = _filter_documents(pairs, 's-1')
         assert [_clean_text(d) for d, _ in accepted] == ['first', 'second']
+
+
+class TestToRetrievedDocument:
+
+    def test_titles_by_section_first(self) -> None:
+        doc = _doc(section='Projects', category='work')
+        assert _to_retrieved_document(doc, 0.9, 1)['title'] == 'Projects'
+
+    def test_falls_back_to_category(self) -> None:
+        doc = _doc(category='work')
+        assert _to_retrieved_document(doc, 0.9, 1)['title'] == 'work'
+
+    def test_falls_back_to_the_positional_label(self) -> None:
+        assert _to_retrieved_document(_doc(), 0.9, 3)['title'] == 'Document 3'
+
+    def test_truncates_the_content_preview(self) -> None:
+        record = _to_retrieved_document(_doc(text='x' * 900), 0.9, 1)
+        assert len(record['content']) == 500
+
+    def test_score_is_stored_as_a_float(self) -> None:
+        assert _to_retrieved_document(_doc(), 1, 1)['score'] == 1.0
+
+    def test_missing_metadata_becomes_none(self) -> None:
+        record = _to_retrieved_document(_doc(), 0.9, 1)
+        assert record['metadata'] == {
+            'category': None, 'section': None, 'type': None
+        }
 
 

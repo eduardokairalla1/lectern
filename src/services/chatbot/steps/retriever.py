@@ -4,6 +4,7 @@ Retrieve documents step.
 
 # --- IMPORTS ---
 from langchain_core.documents import Document
+from src.types.documents import RetrievedDocument
 
 import logging
 
@@ -25,6 +26,34 @@ def _clean_text(doc: Document) -> str:
     :return: The document's clean text.
     """
     return doc.metadata.get('text') or doc.page_content
+
+
+def _to_retrieved_document(
+    doc: Document,
+    score: float,
+    index: int
+) -> RetrievedDocument:
+    """
+    Build the raw document record persisted with the exchange.
+
+    :param doc: The accepted document.
+    :param score: Its similarity score.
+    :param index: Its 1-based position among the accepted documents.
+
+    :return: The raw document record for database storage.
+    """
+    return {
+        'title': doc.metadata.get('section')
+        or doc.metadata.get('category')
+        or f'Document {index}',
+        'score': float(score),
+        'content': _clean_text(doc)[:500],
+        'metadata': {
+            'category': doc.metadata.get('category'),
+            'section': doc.metadata.get('section'),
+            'type': doc.metadata.get('type'),
+        },
+    }
 
 
 def _filter_documents(
