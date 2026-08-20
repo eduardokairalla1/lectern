@@ -4,6 +4,7 @@ Conversation summary memory.
 
 # --- IMPORTS ---
 from src.databases.redis import operations
+from src.services.chatbot.prompts import INITIAL_SUMMARY
 
 import json
 import logging
@@ -40,6 +41,27 @@ def _recent_key(session_id: str) -> str:
     :return: Redis key for the recent interactions.
     """
     return f'memory:{session_id}:recent'
+
+
+async def _get_summary(session_id: str) -> str:
+    """
+    Fetches the conversation summary.
+
+    :param session_id: Conversation identifier.
+
+    :return: The conversation summary, or INITIAL_SUMMARY if none exists.
+    """
+    # get the summary key
+    key = _summary_key(session_id)
+
+    # expire the summary key
+    await operations.expire(key, TTL_SECONDS)
+
+    # fetch the summary from Redis
+    summary = await operations.get(key)
+
+    # return the summary or the initial summary if none exists
+    return summary if summary is not None else INITIAL_SUMMARY
 
 
 def _format(summary: str, recent: list[tuple[str, str]]) -> str:
