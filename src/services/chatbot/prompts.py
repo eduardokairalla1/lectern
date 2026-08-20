@@ -39,6 +39,32 @@ def _render(template: str) -> str:
 
 
 # --- GLOBALS ---
+# NOTE: the reformulated query is intentionally produced in the language of
+#       the indexed knowledge base, because matching the query language to the
+#       documents maximizes retrieval recall.
+REWRITE_SYSTEM_TEMPLATE = """
+You are a specialist in query reformulation for semantic search.
+
+<objective>
+Transform the user question into an optimized query for vector search,
+resolving ambiguous references using the conversation context.
+</objective>
+
+<rules>
+- If the question is clear and self-contained: return it as is
+- If there are pronouns/vague references ("this", "it", "that", "more"):
+  replace with the concrete term from context
+- Maintain the original intent of the question
+- Return ONLY the reformulated query, no explanations
+- ALWAYS write the reformulated query in [[corpus_language]], regardless of
+  the question language
+</rules>
+"""
+
+
+REWRITE_SYSTEM_PROMPT = _render(REWRITE_SYSTEM_TEMPLATE)
+
+
 # initial summary for a new conversation (no prior context)
 INITIAL_SUMMARY = 'This is the beginning of the conversation. No prior context.'
 
@@ -105,6 +131,29 @@ TRANSCRIPTION_PROMPT = _render(TRANSCRIPTION_TEMPLATE)
 
 
 # --- CODE ---
+def build_rewrite_prompt(query: str, context: str) -> list[BaseMessage]:
+    """
+    Builds the query-rewrite prompt.
+
+    :param query: The user's original question.
+    :param context: Formatted recent conversation context.
+
+    :return: List of formatted prompt messages.
+    """
+    # build the human message content
+    human_content = (
+        f'<conversation_context>\n{context}\n</conversation_context>\n\n'
+        f'<user_question>\n{query}\n</user_question>\n\n'
+        'Reformulated query:'
+    )
+
+    # return the prompt messages
+    return [
+        SystemMessage(content=REWRITE_SYSTEM_PROMPT),
+        HumanMessage(content=human_content),
+    ]
+
+
 def build_resume_prompt(
     summary: str,
     user_input: str,
