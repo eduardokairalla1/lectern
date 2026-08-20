@@ -189,3 +189,19 @@ class ChatbotPayload(BaseModel):
         return sessionId
 
 
+# --- RESPONSES ---
+class ChatbotResponse(BaseModel):
+    """
+    Assistant answer returned by POST /api/chatbot/response.
+    """
+    response: str = Field(
+        description="The assistant's answer, in the visitor's language.",
+        examples=['They built, among other things, an API that...'],
+    )
+    exchangeId: str | None = Field(
+        default=None,
+        description='UUID identifying this question/answer pair, to be '
+                    'sent to POST '
+                    '/api/chatbot/feedback/exchange/{exchangeId}.',
+        examples=['3f2504e0-4f89-11d3-9a0c-0305e82c3301'],
+    )
