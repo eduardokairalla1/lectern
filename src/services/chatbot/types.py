@@ -9,7 +9,9 @@ from src.schemas.endpoints.chatbot_response import ChatbotPayload
 from src.schemas.outputparser import ResponseOutputParser
 from src.types.documents import RetrievedDocument
 from src.types.executions import ExecutionType
+from typing import Literal
 from typing import NotRequired
+from typing import Required
 from typing import TypedDict
 
 
@@ -96,6 +98,39 @@ class State(TypedDict):
     message: str
     response: (ResponseOutputParser | None)
     execution: list[Execution]
+
+
+# --- OUTPUT ---
+StreamEventType = Literal[
+    'ready',        # stream accepted, generation started
+    'token',        # next chunk of the answer
+    'stream_end',   # no more tokens
+    'done',         # terminal event, carries the answer metadata
+    'error',        # generation failed, the stream ends here
+]
+
+
+StreamErrorCode = Literal[
+    'timeout',      # the model took too long
+    'rate_limit',   # the provider throttled us
+    'auth',         # the provider rejected our credentials
+    'unavailable',  # the provider or a dependency is down
+    'unknown',      # anything the table does not recognize
+]
+
+
+class StreamEvent(TypedDict, total=False):
+    """
+    Base type for all stream events.
+    """
+    type: Required[StreamEventType]
+    content: str
+    sessionId: str
+    answered: bool
+    category: str
+    exchangeId: str
+    error_code: StreamErrorCode
+    message: str
 
 
 # --- CACHE ---
