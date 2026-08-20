@@ -5,6 +5,7 @@ The chatbot pipeline's own vocabulary.
 # --- IMPORTS ---
 from dataclasses import dataclass
 from src.schemas.endpoints.chatbot_response import ChatbotPayload
+from typing import TypedDict
 
 
 # --- INPUT ---
@@ -35,3 +36,11 @@ class ChatMessage:
         )
 
 
+# --- CACHE ---
+class CachedResponse(TypedDict):
+    """
+    Cached assistant response, keyed by normalized query.
+    """
+    response: str
+    answered: bool
+    category: str
