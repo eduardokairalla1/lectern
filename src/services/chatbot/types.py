@@ -6,7 +6,10 @@ The chatbot pipeline's own vocabulary.
 from dataclasses import dataclass
 from langchain_core.messages import BaseMessage
 from src.schemas.endpoints.chatbot_response import ChatbotPayload
+from src.schemas.outputparser import ResponseOutputParser
+from src.types.documents import RetrievedDocument
 from src.types.executions import ExecutionType
+from typing import NotRequired
 from typing import TypedDict
 
 
@@ -77,6 +80,22 @@ class Execution:
             output_tokens=usage.get('output_tokens'),
             total_tokens=usage.get('total_tokens'),
         )
+
+
+class State(TypedDict):
+    """
+    Defines the internal state structure for a chatbot interaction.
+    """
+    sessionId: str
+    exchangeId: str
+    recentInteractions: list[tuple[str, str]]
+    memoryText: str
+    rewrittenQuery: str
+    context: str
+    retrievedDocuments: NotRequired[list[RetrievedDocument]]
+    message: str
+    response: (ResponseOutputParser | None)
+    execution: list[Execution]
 
 
 # --- CACHE ---
