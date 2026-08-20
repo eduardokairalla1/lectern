@@ -3,7 +3,9 @@ Conversation summary memory.
 """
 
 # --- IMPORTS ---
+from src.databases.redis import operations
 
+import json
 import logging
 
 
@@ -63,5 +65,25 @@ def _format(summary: str, recent: list[tuple[str, str]]) -> str:
 
     # return the summary followed by the recent interactions
     return f'{summary}\n\n' + '\n'.join(lines)
+
+
+async def get_recent_interactions(session_id: str) -> list[tuple[str, str]]:
+    """
+    Returns the most recent raw (question, answer) interactions for a session.
+
+    :param session_id: Conversation identifier.
+
+    :return: List of (user_input, response) tuples, in chronological order.
+    """
+    # fetch the recent interactions from Redis
+    data = await operations.get(_recent_key(session_id))
+
+    # data exists: parse it as JSON and return the list of tuples
+    if data:
+        items = json.loads(data)
+        return [(item['input'], item['response']) for item in items]
+
+    # no data: return an empty list
+    return []
 
 

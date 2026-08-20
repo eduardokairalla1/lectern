@@ -3,7 +3,12 @@ Unit tests for the conversation memory (summary + recent interactions).
 """
 
 # --- IMPORTS ---
+from src.resources import Resources
 from src.services.chatbot import memory
+from tests.unit.conftest import FakeRedis
+
+import json
+import pytest
 
 
 # --- CODE ---
@@ -32,5 +37,23 @@ class TestFormat:
     def test_keeps_the_summary_first(self) -> None:
         formatted = memory._format('summary', [('q', 'a')])
         assert formatted.startswith('summary')
+
+
+class TestGetRecentInteractions:
+
+    @pytest.mark.anyio
+    async def test_returns_empty_when_nothing_is_stored(
+        self, resources: Resources
+    ) -> None:
+        assert await memory.get_recent_interactions('s-1') == []
+
+    @pytest.mark.anyio
+    async def test_parses_stored_pairs(
+        self, resources: Resources, fake_redis: FakeRedis
+    ) -> None:
+        fake_redis.data[memory._recent_key('s-1')] = json.dumps(
+            [{'input': 'q', 'response': 'a'}]
+        )
+        assert await memory.get_recent_interactions('s-1') == [('q', 'a')]
 
 
