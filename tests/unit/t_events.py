@@ -5,11 +5,14 @@ Unit tests for the SSE event constructors and error classification.
 # --- IMPORTS ---
 from src.services.chatbot.events import done_event
 from src.services.chatbot.events import error_event
+from src.services.chatbot.events import format_sse
 from src.services.chatbot.events import ready_event
 from src.services.chatbot.events import sanitize_output
 from src.services.chatbot.events import stream_end_event
 from src.services.chatbot.events import strip_meta_artifacts
 from src.services.chatbot.events import token_event
+
+import json
 
 
 # --- OUTPUT SANITIZATION ---
@@ -75,5 +78,23 @@ class TestEventConstructors:
 
     def test_done_event_with_exchange_id_includes_it(self) -> None:
         assert done_event(True, 'skills', 'ex-1')['exchangeId'] == 'ex-1'
+
+
+class TestFormatSse:
+
+    def test_wraps_the_event_in_an_sse_frame(self) -> None:
+        assert format_sse({'type': 'stream_end'}) == (
+            'data: {"type": "stream_end"}\n\n'
+        )
+
+    def test_payload_is_valid_json(self) -> None:
+        frame = format_sse(token_event('oi'))
+        assert json.loads(frame.removeprefix('data: ')) == {
+            'type': 'token', 'content': 'oi'
+        }
+
+    def test_non_ascii_survives_the_round_trip(self) -> None:
+        frame = format_sse(token_event('ação 😄'))
+        assert json.loads(frame.removeprefix('data: '))['content'] == 'ação 😄'
 
 

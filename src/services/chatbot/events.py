@@ -7,6 +7,7 @@ from src.services.chatbot.types import StreamErrorCode
 from src.services.chatbot.types import StreamEvent
 
 import html
+import json
 import re
 
 
@@ -102,5 +103,11 @@ def ready_event(session_id: str) -> StreamEvent:
 def error_event(error_code: StreamErrorCode, message: str) -> StreamEvent:
     """A recoverable/terminal error. `error_code` lets the client localize."""
     return {'type': 'error', 'error_code': error_code, 'message': message}
+
+
+# --- SERIALIZATION ---
+def format_sse(event: StreamEvent) -> str:
+    """Serialize an event dict into a Server-Sent Events frame."""
+    return f'data: {json.dumps(event)}\n\n'
 
 
