@@ -94,3 +94,22 @@ async def expire(key: str, ttl: int) -> None:
             }
         ) from e
 
+
+async def scan_keys(pattern: str) -> list[str]:
+    """
+    Returns every key matching a glob-style pattern.
+    """
+    # scan keys by pattern
+    try:
+        return [
+            key
+            async for key in get_resources().redis_client.scan_iter(
+                match=pattern
+            )
+        ]
+
+    # errors occurred: raise RedisUnavailableError with details
+    except Exception as e:
+        raise RedisUnavailableError(
+            {'operation': 'scan', 'pattern': pattern, 'error': str(e)}
+        ) from e
