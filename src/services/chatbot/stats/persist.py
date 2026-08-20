@@ -4,9 +4,12 @@ Persists exchange and execution statistics through the repositories.
 
 # --- IMPORTS ---
 from src.databases.relational.models.exchanges import Exchanges
+from src.databases.relational.models.executions import Executions
 from src.resources import get_resources
 from src.types.stats import ExchangeStats
+from src.types.stats import ExecutionStats
 from src.types.stats import SessionStats
+from uuid import UUID
 
 import logging
 
@@ -57,3 +60,29 @@ async def insert_exchange(
     return exchange
 
 
+async def insert_executions(
+    exchange_id: UUID,
+    executions: list[ExecutionStats],
+) -> None:
+    """
+    Insert the execution metrics into database.
+
+    :param exchange_id: UUID of the parent exchange.
+    :param executions: Dictionaries with execution metrics.
+
+    :returns: None.
+    """
+    # build executions
+    executions_model = [
+        Executions(exchange_id=exchange_id, **execution_data)
+        for execution_data in executions
+    ]
+
+    # insert executions
+    await get_resources().executions_repository.insert_executions(
+        executions_model
+    )
+    logger.debug(
+        f'[Insert Stats] Executions saved ({len(executions)}). '
+        f'Exchange: {exchange_id}'
+    )
