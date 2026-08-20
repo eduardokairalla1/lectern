@@ -3,8 +3,10 @@ Conversation summary memory.
 """
 
 # --- IMPORTS ---
+from langchain_core.runnables import Runnable
 from src.databases.redis import operations
 from src.services.chatbot.prompts import INITIAL_SUMMARY
+from src.services.chatbot.prompts import build_condense_prompt
 
 import json
 import logging
@@ -62,6 +64,29 @@ async def _get_summary(session_id: str) -> str:
 
     # return the summary or the initial summary if none exists
     return summary if summary is not None else INITIAL_SUMMARY
+
+
+async def _condense(llm: Runnable, summary: str) -> str:
+    """
+    Condenses the conversation summary using the LLM.
+
+    :param llm: LLM runnable used to condense the summary.
+    :param summary: The conversation summary to condense.
+
+    :return: The condensed conversation summary, or the original on failure.
+    """
+    # get the condense prompt
+    prompt = build_condense_prompt(summary)
+
+    # run the LLM to condense the summary
+    try:
+        condensed = await llm.ainvoke(prompt)
+        return condensed.content.strip()
+
+    # LLM fails: log a warning and return the original summary
+    except Exception as e:
+        logger.warning(f'[Memory] Failed to condense summary: {e}')
+        return summary
 
 
 def _format(summary: str, recent: list[tuple[str, str]]) -> str:
