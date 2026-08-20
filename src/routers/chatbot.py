@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from src.dependencies.auth import verify_api_key
 from src.dependencies.client_info import get_client_ip
 from src.dependencies.identifiers import valid_exchange_id
+from src.dependencies.identifiers import valid_session_id
 from src.errors.database_unavailable_error import DatabaseUnavailableError
 from src.errors.invalid_request_error import InvalidRequestError
 from src.errors.payload_too_large_error import PayloadTooLargeError
@@ -25,9 +26,13 @@ from src.schemas.endpoints.chatbot_feedback import FeedbackPayload
 from src.schemas.endpoints.chatbot_feedback import FeedbackResponse
 from src.schemas.endpoints.chatbot_response import ChatbotPayload
 from src.schemas.endpoints.chatbot_response import ChatbotResponse
+from src.schemas.endpoints.chatbot_session_feedback import (
+    SessionFeedbackPayload,
+)
 from src.schemas.errors import VALIDATION_RESPONSE
 from src.schemas.errors import error_responses
 from src.services.chatbot.persistence import schedule_feedback
+from src.services.chatbot.persistence import schedule_session_feedback
 from src.services.chatbot.respond import respond
 from src.services.chatbot.respond_stream import respond_stream
 from src.services.chatbot.types import ChatbotResult
@@ -188,3 +193,44 @@ async def chatbot_feedback_endpoint(
     return FeedbackResponse(status='accepted')
 
 
+@router.post('/feedback/session/{sessionId}',
+             summary='Rate a whole conversation',
+             status_code=202,
+             response_model=FeedbackResponse,
+             responses={
+                 **error_responses(
+                     InvalidRequestError,
+                     UnauthorizedError,
+                     ProcessingError,
+                 ),
+                 **VALIDATION_RESPONSE,
+             },
+             dependencies=[Depends(verify_api_key)])
+async def chatbot_session_feedback_endpoint(
+    session_id: Annotated[str, Depends(valid_session_id)],
+    payload: SessionFeedbackPayload,
+) -> FeedbackResponse:
+    """
+    Records a visitor's rating of an entire conversation.
+
+    Rates the conversation as a whole, on a 0-10 scale, plus an optional
+    note. Use it for "was this visit worth my time"; use
+    `POST /api/chatbot/feedback/exchange/{exchangeId}` to rate one specific
+    answer. The two are independent, and a client may send either, both, or
+    neither.
+
+    When to ask is the client's decision — this endpoint accepts the rating
+    whenever it arrives, including more than once for the same conversation.
+    A rating sent after the conversation has grown is recorded alongside the
+    earlier one, since it judges a longer conversation; one sent without any
+    new message in between replaces the previous rating instead.
+
+    Responds `202 Accepted`: the rating is persisted by a background worker,
+    so a successful response means it was accepted, not yet stored.
+    """
+    schedule_session_feedback(
+        session_id=session_id,
+        score=payload.score,
+        comment=payload.comment,
+    )
+    return FeedbackResponse(status='accepted')
