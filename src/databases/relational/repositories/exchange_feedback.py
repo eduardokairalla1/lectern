@@ -3,6 +3,7 @@ Exchange feedback table repository.
 """
 
 # --- IMPORTS ---
+from sqlalchemy import select
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from src.databases.relational.models.exchange_feedback import ExchangeFeedback
@@ -54,3 +55,25 @@ class ExchangeFeedbackRepository(BaseRepository):
             # Commit changes
             await session.commit()
 
+
+    async def get_by_exchange_id(
+        self, exchange_id: UUID
+    ) -> ExchangeFeedback | None:
+        """
+        Retrieves the feedback of an exchange.
+
+        :param exchange_id: UUID of the exchange.
+
+        :returns: ExchangeFeedback or None if not found.
+        """
+        # open database connection
+        async with self._session() as session:
+
+            # retrieve feedback by exchange_id from database
+            stmt = select(ExchangeFeedback).where(
+                ExchangeFeedback.exchange_id == exchange_id
+            )
+            result = await session.execute(stmt)
+
+            # Returns ExchangeFeedback or None
+            return result.scalar_one_or_none()
