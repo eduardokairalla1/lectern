@@ -3,10 +3,12 @@ Executions table repository.
 """
 
 # --- IMPORTS ---
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from src.databases.relational.models.executions import Executions
 from src.databases.relational.setup.base_repository import BaseRepository
 from src.errors.already_exists_error import AlreadyExistsError
+from uuid import UUID
 
 
 # --- CODE ---
@@ -50,4 +52,23 @@ class ExecutionsRepository(BaseRepository):
                         'detail': 'Execution already exists.',
                     }
                 ) from e
+
+
+    async def get_by_id(self, execution_id: UUID) -> Executions | None:
+        """
+        Retrieves an execution by id.
+
+        :param execution_id: UUID of the execution.
+
+        :returns: Execution or None if not found.
+        """
+        # open database connection
+        async with self._session() as session:
+
+            # retrieve execution by id from database
+            stmt = select(Executions).where(Executions.id == execution_id)
+            result = await session.execute(stmt)
+
+            # returns Execution or None
+            return result.scalar_one_or_none()
 
