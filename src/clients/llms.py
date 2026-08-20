@@ -21,6 +21,10 @@ STRUCTURED_ASSISTANT_LLM = ASSISTANT_LLM.with_structured_output(
     ResponseOutputParser, include_raw=True
 )
 
+MEMORY_LLM = ChatOpenAI(
+    api_key=config.OPENAI_API_KEY_MEMORY, model=config.MEMORY_MODEL
+)
+
 REWRITE_MODEL = ChatOpenAI(
     api_key=config.OPENAI_API_KEY_REWRITE, model=config.REWRITE_MODEL
 )
