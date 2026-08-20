@@ -3,6 +3,7 @@ Exchanges table repository.
 """
 
 # --- IMPORTS ---
+from sqlalchemy import desc
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,6 +71,7 @@ class ExchangesRepository(BaseRepository):
                     }
                 ) from e
 
+
     async def get_by_id(self, exchange_id: UUID) -> Exchanges | None:
         """
         Retrieves an exchange by id.
@@ -83,4 +85,33 @@ class ExchangesRepository(BaseRepository):
 
             # returns Exchange or None
             return await self._get(session, exchange_id)
+
+    async def get_by_session_id(
+        self, session_id: str, limit: int = 50, offset: int = 0
+    ) -> list[Exchanges]:
+        """
+        Retrieves all exchanges for a specific session.
+
+        :param session_id: Session identifier.
+        :param limit: Maximum number of results (default: 50).
+        :param offset: Number of results to skip (default: 0).
+
+        :returns: List of exchanges.
+        """
+        # open database connection
+        async with self._session() as session:
+
+            # retrieves exchanges by session_id from database
+            stmt = (
+                select(Exchanges)
+                .where(Exchanges.session_id == session_id)
+                .order_by(desc(Exchanges.created_at))
+                .limit(limit)
+                .offset(offset)
+            )
+
+            result = await session.execute(stmt)
+
+            # returns list of exchanges
+            return list(result.scalars().all())
 
