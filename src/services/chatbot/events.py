@@ -3,6 +3,8 @@ Server-Sent Events (SSE) for the chatbot.
 """
 
 # --- IMPORTS ---
+from src.services.chatbot.types import StreamErrorCode
+from src.services.chatbot.types import StreamEvent
 
 import html
 import re
@@ -61,5 +63,44 @@ def sanitize_output(text: str) -> str:
     sanitized = html.escape(text, quote=False)
 
     return sanitized
+
+
+# --- EVENT CONSTRUCTORS ---
+def token_event(content: str) -> StreamEvent:
+    """A chunk of assistant text."""
+    return {'type': 'token', 'content': content}
+
+
+def stream_end_event() -> StreamEvent:
+    """Streaming of tokens is done (UI can hide the cursor)."""
+    return {'type': 'stream_end'}
+
+
+def done_event(
+    answered: bool, category: str, exchange_id: str | None = None
+) -> StreamEvent:
+    """Terminal event carrying the final answered/category metadata.
+
+    `exchangeId` (additive field) lets the client reference this exchange
+    later (e.g. feedback); absent on cache hits, which don't create an
+    exchange row.
+    """
+    event: StreamEvent = {
+        'type': 'done', 'answered': answered, 'category': category
+    }
+    if exchange_id:
+        event['exchangeId'] = exchange_id
+    return event
+
+
+def ready_event(session_id: str) -> StreamEvent:
+    """Emitted first so the client can confirm the session is being
+    processed."""
+    return {'type': 'ready', 'sessionId': session_id}
+
+
+def error_event(error_code: StreamErrorCode, message: str) -> StreamEvent:
+    """A recoverable/terminal error. `error_code` lets the client localize."""
+    return {'type': 'error', 'error_code': error_code, 'message': message}
 
 

@@ -3,8 +3,13 @@ Unit tests for the SSE event constructors and error classification.
 """
 
 # --- IMPORTS ---
+from src.services.chatbot.events import done_event
+from src.services.chatbot.events import error_event
+from src.services.chatbot.events import ready_event
 from src.services.chatbot.events import sanitize_output
+from src.services.chatbot.events import stream_end_event
 from src.services.chatbot.events import strip_meta_artifacts
+from src.services.chatbot.events import token_event
 
 
 # --- OUTPUT SANITIZATION ---
@@ -44,5 +49,31 @@ class TestStripMetaArtifacts:
 
     def test_empty_string_stays_empty(self) -> None:
         assert strip_meta_artifacts('') == ''
+
+
+# --- EVENT CONSTRUCTORS ---
+class TestEventConstructors:
+
+    def test_token_event_carries_the_content(self) -> None:
+        assert token_event('hi') == {'type': 'token', 'content': 'hi'}
+
+    def test_stream_end_event_has_no_payload(self) -> None:
+        assert stream_end_event() == {'type': 'stream_end'}
+
+    def test_ready_event_carries_the_session(self) -> None:
+        assert ready_event('s-1') == {'type': 'ready', 'sessionId': 's-1'}
+
+    def test_error_event_carries_code_and_message(self) -> None:
+        event = error_event('timeout', 'too slow')
+        assert event == {
+            'type': 'error', 'error_code': 'timeout', 'message': 'too slow'
+        }
+
+    def test_done_event_without_exchange_id_omits_the_key(self) -> None:
+        # a cache hit creates no exchange, so the client gets no id to rate
+        assert 'exchangeId' not in done_event(True, 'skills')
+
+    def test_done_event_with_exchange_id_includes_it(self) -> None:
+        assert done_event(True, 'skills', 'ex-1')['exchangeId'] == 'ex-1'
 
 
