@@ -3,8 +3,12 @@ Response cache.
 """
 
 # --- IMPORTS ---
+from src.databases.redis import operations
+from src.errors.redis_unavailable_error import RedisUnavailableError
+from src.services.chatbot.types import CachedResponse
 
 import hashlib
+import json
 import logging
 import string
 
@@ -35,5 +39,32 @@ def _cache_key(query: str) -> str:
 
     # build the cache key with the prefix and the digest
     return f'{CACHE_PREFIX}{digest}'
+
+
+async def get_cached_response(query: str) -> CachedResponse | None:
+    """
+    Returns the cached response for a query, or None on miss/error.
+
+    :param query: User query.
+
+    :return: Cached response or None.
+    """
+    # get the cached response from Redis
+    try:
+        cached = await operations.get(_cache_key(query))
+
+        # cache hit: parse the cached JSON and return it
+        if cached:
+            logger.debug('[Cache] HIT (query %s chars)', len(query))
+            return json.loads(cached)
+
+        # cache miss: return None
+        logger.debug('[Cache] MISS (query %s chars)', len(query))
+        return None
+
+    # Redis is unavailable: log a warning and return None
+    except RedisUnavailableError as e:
+        logger.warning('[Cache] Error getting cache: %s', e.args)
+        return None
 
 
