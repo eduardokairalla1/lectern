@@ -12,6 +12,9 @@ streaming), so it stays in each orchestrator; everything before it is shared.
 from src.services.chatbot import cache
 from src.services.chatbot import memory
 from src.services.chatbot.message import resolve_message
+from src.services.chatbot.steps.load_memory import load_memory
+from src.services.chatbot.steps.retriever import retriever
+from src.services.chatbot.steps.rewrite import rewrite_query
 from src.services.chatbot.types import CachedResponse
 from src.services.chatbot.types import ChatMessage
 from src.services.chatbot.types import State
@@ -90,3 +93,16 @@ def build_initial_state(
     }
 
 
+async def prepare_state(state: State) -> State:
+    """
+    Prepares the State, loading memory, rewriting the query and
+    retrieving the RAG context.
+
+    :param state: The current state of the chatbot session.
+
+    :return: The state populated with memory, rewritten query and context.
+    """
+    state = await load_memory(state)
+    state = await rewrite_query(state)
+    state = await retriever(state)
+    return state
