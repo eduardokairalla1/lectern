@@ -38,6 +38,31 @@ async def upsert_session(session_data: SessionStats) -> None:
     )
 
 
+async def upsert_feedback(
+    exchange_id: UUID,
+    rating: str,
+    comment: str | None = None
+) -> None:
+    """
+    Inserts or updates the visitor feedback of an exchange.
+
+    :param exchange_id: UUID of the rated exchange.
+    :param rating: Visitor rating: 'up' or 'down'.
+    :param comment: Optional free-text comment.
+
+    :returns: None.
+    """
+    await get_resources().exchange_feedback_repository.upsert_feedback(
+        exchange_id=exchange_id,
+        rating=rating,
+        comment=comment,
+    )
+    logger.debug(
+        f'[Insert Stats] Feedback upserted. '
+        f'Exchange: {exchange_id}, Rating: {rating}'
+    )
+
+
 async def insert_exchange(
     exchange_data: ExchangeStats,
 ) -> Exchanges:
