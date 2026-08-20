@@ -8,6 +8,7 @@ from src.dependencies.identifiers import valid_exchange_id
 from src.dependencies.identifiers import valid_session_id
 from src.errors.invalid_request_error import InvalidRequestError
 from src.errors.payload_too_large_error import PayloadTooLargeError
+from src.schemas.endpoints.chatbot_feedback import FeedbackPayload
 from src.schemas.endpoints.chatbot_response import ChatbotPayload
 from src.schemas.endpoints.chatbot_response import Message
 from typing import Any
@@ -31,6 +32,8 @@ class _FakeSessionMaker:
 
     def __call__(self) -> _FakeSession:
         return _FakeSession()
+
+
 # --- MESSAGE: content ---
 def test_text_message_valid() -> None:
     message = Message(content='Oi, tudo bem?', messageType='text')
@@ -131,7 +134,18 @@ def test_session_id_invalid_characters_are_rejected(bad_session: str) -> None:
     with pytest.raises(InvalidRequestError):
         ChatbotPayload(**_payload(bad_session))
 
+
 # --- FEEDBACK ROUTER ---
+
+
+def test_feedback_valid() -> None:
+    feedback = FeedbackPayload(rating='up', comment='muito bom')
+    assert feedback.rating == 'up'
+
+
+def test_feedback_rating_down_is_accepted() -> None:
+    FeedbackPayload(rating='down')
+
 
 def test_exchange_id_path_validator_rejects_a_non_uuid() -> None:
     with pytest.raises(InvalidRequestError):
@@ -141,6 +155,23 @@ def test_exchange_id_path_validator_rejects_a_non_uuid() -> None:
 def test_session_id_path_validator_rejects_an_invalid_charset() -> None:
     with pytest.raises(InvalidRequestError):
         valid_session_id('bad id!')
+
+
+def test_feedback_unsupported_rating_is_rejected() -> None:
+    with pytest.raises(InvalidRequestError):
+        FeedbackPayload(rating='meh')
+
+
+def test_feedback_comment_boundary() -> None:
+    FeedbackPayload(rating='up', comment='a' * 500)
+    with pytest.raises(InvalidRequestError):
+        FeedbackPayload(rating='up', comment='a' * 501)
+
+
+def test_feedback_comment_is_optional() -> None:
+    feedback = FeedbackPayload(rating='up')
+    assert feedback.comment is None
+
 
 # --- REPOSITORY ERROR MAPPING ---
 @pytest.mark.anyio
