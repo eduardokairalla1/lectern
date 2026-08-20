@@ -113,3 +113,25 @@ async def set_cached_response(
         return False
 
 
+async def invalidate_cached_response(query: str) -> bool:
+    """
+    Removes a cached response for a query.
+
+    :param query: User query.
+
+    :return: True if invalidated successfully, False otherwise.
+    """
+    # delete the cached response
+    try:
+        await operations.delete(_cache_key(query))
+        logger.debug('[Cache] Invalidated entry (query %s chars)', len(query))
+
+        # return True on success
+        return True
+
+    # Redis is unavailable: log a warning and return False
+    except RedisUnavailableError as e:
+        logger.warning('[Cache] Error invalidating cache: %s', e.args)
+        return False
+
+
