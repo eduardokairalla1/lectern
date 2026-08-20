@@ -4,6 +4,7 @@ Unit tests for the SSE event constructors and error classification.
 
 # --- IMPORTS ---
 from src.services.chatbot.events import sanitize_output
+from src.services.chatbot.events import strip_meta_artifacts
 
 
 # --- OUTPUT SANITIZATION ---
@@ -28,5 +29,20 @@ class TestSanitizeOutput:
         # sanitizes each token exactly once
         once = sanitize_output('<b>')
         assert sanitize_output(once) != once
+
+
+class TestStripMetaArtifacts:
+
+    def test_removes_trailing_answered_line(self) -> None:
+        assert strip_meta_artifacts('Reply.\nanswered = true') == 'Reply.'
+
+    def test_removes_trailing_category_line(self) -> None:
+        assert strip_meta_artifacts('Reply.\ncategory: skills') == 'Reply.'
+
+    def test_keeps_a_clean_reply_untouched(self) -> None:
+        assert strip_meta_artifacts('Just an answer.') == 'Just an answer.'
+
+    def test_empty_string_stays_empty(self) -> None:
+        assert strip_meta_artifacts('') == ''
 
 
