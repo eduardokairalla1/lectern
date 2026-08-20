@@ -11,8 +11,12 @@ from src.services.chatbot.events import stream_end_event
 from src.services.chatbot.events import token_event
 from src.services.chatbot.persistence import schedule_cache_hit_persistence
 from src.services.chatbot.persistence import schedule_memory_update
+from src.services.chatbot.pipeline import prepare_state
+from src.services.chatbot.steps.stream_answer import stream_answer
 from src.services.chatbot.types import CachedResponse
 from src.services.chatbot.types import ChatMessage
+from src.services.chatbot.types import State
+from src.services.chatbot.types import StreamEvent
 from uuid import uuid4
 
 import logging
@@ -26,6 +30,48 @@ MAX_STREAM_TOTAL_DURATION_SECONDS = 90
 
 
 # --- CODE ---
+async def _execute_pipeline_streaming(
+    state: State,
+) -> AsyncGenerator[StreamEvent, None]:
+    """
+    Execute the pipeline with streaming on the answer step.
+
+    :param state: The current state of the chatbot session.
+
+    :return: An async generator yielding events to be sent to the client.
+    """
+    logger.info(
+        f'[Streaming] Starting pipeline execution. '
+        f'Session: {state["sessionId"]}'
+    )
+
+    # prepare the state (load memory, etc.)
+    state = await prepare_state(state)
+
+    # execute the answer step with streaming
+    async for event in stream_answer(state):
+        yield event
+
+    # get the final response from the state
+    response = state['response']
+
+    # streaming ended with an error: skip stats/cache
+    if response is None:
+        return
+
+    logger.info(
+        f'[Streaming] Pipeline execution complete. '
+        f'Session: {state["sessionId"]}'
+    )
+
+    # yield the final done event with the response metadata
+    yield done_event(
+        response.answered,
+        response.category,
+        state['exchangeId'],
+    )
+
+
 async def _stream_cached_response(
     chat_message: ChatMessage,
     message: str,
