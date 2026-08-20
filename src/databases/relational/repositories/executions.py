@@ -188,3 +188,24 @@ class ExecutionsRepository(BaseRepository):
                 for row in result.all()
             ]
 
+
+    async def delete_execution(self, execution_id: UUID) -> None:
+        """
+        Delete an execution by id.
+
+        :param execution_id: UUID of the execution.
+
+        :returns: None.
+        """
+        # open database connection
+        async with self._session() as session:
+
+            # delete execution from database
+            stmt = select(Executions).where(Executions.id == execution_id)
+            result = await session.execute(stmt)
+            execution = result.scalar_one_or_none()
+
+            # execution exists: delete it
+            if execution:
+                await session.delete(execution)
+                await session.commit()
