@@ -101,6 +101,14 @@ class State(TypedDict):
 
 
 # --- OUTPUT ---
+class AnswerMetadata(TypedDict):
+    """
+    Answered/category metadata derived for an assistant response.
+    """
+    answered: bool
+    category: str
+
+
 StreamEventType = Literal[
     'ready',        # stream accepted, generation started
     'token',        # next chunk of the answer
