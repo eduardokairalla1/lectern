@@ -6,8 +6,10 @@ Audio transcription helper.
 from src.config import config
 from src.errors.invalid_request_error import InvalidRequestError
 from src.errors.payload_too_large_error import PayloadTooLargeError
+from src.errors.unsupported_media_type_error import UnsupportedMediaTypeError
 
 import base64
+import filetype
 import logging
 
 
@@ -58,4 +60,38 @@ def decode_audio(media_base64: str) -> bytes:
 
     # return the decoded audio bytes
     return audio_bytes
+
+
+def get_audio_format(audio_bytes: bytes) -> str:
+    """
+    Detect the audio format and validate it against supported formats.
+
+    :param audio_bytes: Decoded audio bytes.
+
+    :raises InvalidRequestError: If the format can't be detected.
+    :raises UnsupportedMediaTypeError: If the format isn't supported.
+
+    :return: File extension of the detected format.
+    """
+    # detect the audio format
+    kind = filetype.guess(audio_bytes)
+
+    # format can't be detected: log and raise
+    if not kind:
+        logger.error(
+            'Transcription failed: Unable to detect audio file format. '
+            'File may be corrupted.'
+        )
+        raise InvalidRequestError()
+
+    # format isn't supported: log and raise
+    if kind.extension not in config.AUDIO_SUPPORTED_FORMATS:
+        logger.error(
+            f'Transcription failed: Unsupported audio format '
+            f'"{kind.extension}". Supported: {config.AUDIO_SUPPORTED_FORMATS}'
+        )
+        raise UnsupportedMediaTypeError()
+
+    # return the detected audio format extension
+    return kind.extension
 
