@@ -1,0 +1,22 @@
+# --- Qdrant configuration ---
+log_level: INFO
+
+# usage reporting is opt-out; a self-hosted deployment has no reason to send it
+telemetry_disabled: true
+
+service:
+  # NOTE: leave api_key unset. src/databases/vector/client.py builds the client
+  #       as QdrantClient(url=...) with no credentials, so turning this on makes
+  #       every retrieval fail with 401 — and the failure surfaces as an empty
+  #       corpus, not as an auth error. The network boundary is what protects
+  #       this service: it is on the internal network and its published port is
+  #       bound to loopback.
+  # api_key: ...
+
+  # embeddings are batched on upsert; the default 32 MB is ample for the
+  # per-request payloads this app sends
+  max_request_size_mb: 32
+
+storage:
+  # matches the ./data/qdrant bind mount in docker-compose.yaml
+  storage_path: /qdrant/storage

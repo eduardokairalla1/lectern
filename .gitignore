@@ -166,6 +166,9 @@ tmp/ai/
 # deployment identity (see identity.example.yaml)
 identity.yaml
 
+# deployment runtime state
+deploy/data/
+
 # local scripts
 scripts/python/*
 scripts/build
