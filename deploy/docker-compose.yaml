@@ -1,0 +1,187 @@
+# --- application environment ---
+x-lectern-env: &lectern-env
+
+  # general
+  ENVIRONMENT: production
+  LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+  IDENTITY_FILE: /app/identity.yaml
+
+  # databases
+  DATABASE_URL: postgresql+psycopg://lectern:goodpassword@postgres:5432/lectern
+  REDIS_URL: redis://redis:6379/0
+  QDRANT_URL: http://qdrant:6333
+  VECTOR_COLLECTION: lectern_documents
+
+  # models
+  PRINCIPAL_MODEL: ${PRINCIPAL_MODEL:-gpt-4o-mini}
+  MEMORY_MODEL: ${MEMORY_MODEL:-gpt-4o-mini}
+  REWRITE_MODEL: ${REWRITE_MODEL:-gpt-4o-mini}
+  TRANSCRIBE_MODEL: ${TRANSCRIBE_MODEL:-whisper-1}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+
+  # security
+  API_KEY: ${API_KEY}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:*}
+
+  # audio limits
+  MAX_AUDIO_DURATION_SECONDS: ${MAX_AUDIO_DURATION_SECONDS:-120}
+  MAX_AUDIO_BASE64_SIZE: ${MAX_AUDIO_BASE64_SIZE:-10485760}
+
+  # worker
+  CELERY_CONCURRENCY: ${CELERY_CONCURRENCY:-2}
+
+  # secrets
+  OPENAI_API_KEY_PRINCIPAL: ${OPENAI_API_KEY_PRINCIPAL}
+  OPENAI_API_KEY_MEMORY: ${OPENAI_API_KEY_MEMORY}
+  OPENAI_API_KEY_EMBEDDING: ${OPENAI_API_KEY_EMBEDDING}
+  OPENAI_API_KEY_TRANSCRIBE: ${OPENAI_API_KEY_TRANSCRIBE}
+  OPENAI_API_KEY_REWRITE: ${OPENAI_API_KEY_REWRITE}
+
+# --- lectern Docker Compose ---
+name: lectern
+
+services:
+
+  # --- application Services ---
+  backend:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: api
+    image: lectern-api:local
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/system/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    environment: *lectern-env
+    ports:
+      - "8000:8000"
+
+    # NOTE: ../identity.yaml must exist before the first `up`. Docker creates a
+    #       directory in place of a missing bind-mount source, and the container
+    #       then fails to parse it as YAML.
+    volumes:
+      - ../identity.yaml:/app/identity.yaml:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - edge
+      - internal
+
+  worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: worker
+    image: lectern-worker:local
+    healthcheck:
+      test: ["CMD", "celery", "-A", "src.worker.celery_app", "inspect", "ping", "-t", "10"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    environment: *lectern-env
+
+    # identity.yaml is mounted here too: the summary refresh goes through
+    volumes:
+      - ../identity.yaml:/app/identity.yaml:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    networks:
+      - edge
+      - internal
+
+  # one-shot schema upgrade; the app services wait for it to exit cleanly
+  migrate:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: api
+    image: lectern-api:local
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    environment: *lectern-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
+
+  # --- database Services ---
+  postgres:
+    image: postgres:17
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lectern -d lectern"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    environment:
+      POSTGRES_USER: lectern
+      POSTGRES_PASSWORD: goodpassword
+      POSTGRES_DB: lectern
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./configs/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    networks:
+      - internal
+
+  redis:
+    image: redis:8
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - ./data/redis:/data
+      - ./configs/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - internal
+
+  qdrant:
+    image: qdrant/qdrant:v1.18
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+      - ./configs/qdrant/config.yaml:/qdrant/config/local.yaml:ro
+    networks:
+      - internal
+
+
+# --- networks ---
+# edge - everything that is exposed to the outside world.
+# internal - everything that is not exposed to the outside world.
+networks:
+  edge:
+    driver: bridge
+  internal:
+    driver: bridge

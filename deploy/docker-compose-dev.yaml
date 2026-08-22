@@ -1,0 +1,36 @@
+# How to use:
+#   docker compose -f docker-compose.yaml -f docker-compose-dev.yaml up -d
+
+# --- Development overlay ---
+services:
+  backend:
+    profiles: ["disabled"]
+
+  worker:
+    profiles: ["disabled"]
+
+  # migrations are not run for you here: `uv run alembic upgrade head`
+  migrate:
+    profiles: ["disabled"]
+
+  # --- development container ---
+  dev:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.dev
+    image: lectern-dev:local
+    volumes:
+      - ..:/home/dev/lectern
+    ports:
+      - "127.0.0.1:2222:22"
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - edge
+      - internal
