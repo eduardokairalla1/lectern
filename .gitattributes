@@ -1,0 +1,2 @@
+# normalise line endings on checkout, whatever the platform.
+* text=auto eol=lf
