@@ -42,9 +42,11 @@ records every time it could not answer.
 
 - [Architecture](docs/architecture.md) — layers, request flows, and the
   reasoning behind the notable decisions.
+- [Development](docs/development.md) — running and working on it locally.
 - [Code guidelines](docs/guidelines.md) — conventions the codebase follows.
 - [Domain concepts](docs/concepts.md) — what an exchange, an execution, the
   memory and the cache actually are.
+- [Deployment](deploy/README.md) — how to self-host it, with Docker Compose.
 
 ---
 
@@ -118,54 +120,15 @@ graph TD
 
 ---
 
-## Dev Setup
+## Development Setup
 
-### Requirements
+To work on Lectern, read the [development guide](docs/development.md).
 
-- [Python 3.12+](https://docs.python.org/3.12/) — runtime
-- [uv](https://docs.astral.sh/uv/) — dependencies and virtual environment
-- [PostgreSQL](https://www.postgresql.org/docs/) — exchanges, executions and feedback
-- [Redis](https://redis.io/docs/latest/) — response cache and conversation memory
-- [Qdrant](https://qdrant.tech/documentation/) — vector store for the indexed documents
-- [ffmpeg](https://ffmpeg.org/ffprobe.html) — provides `ffprobe`, which reads the duration of uploaded audio
-- [OpenAI API key](https://platform.openai.com/docs/api-reference) — chat, embeddings and transcription
+---
 
-### Running it
+## Deploy
 
-```bash
-# 1. install dependencies
-uv sync
-
-# 2. declare who this instance speaks for
-cp identity.example.yaml identity.yaml && $EDITOR identity.yaml
-
-# 3. configure infrastructure
-cp .env.example .env && $EDITOR .env
-
-# 4. create the database schema
-uv run alembic upgrade head
-
-# 5. run it
-scripts/dev
-```
-
-The server listens on `http://localhost:8000`, with docs at
-`/api/docs`.
-
-Before committing, run `scripts/test` — it lints, checks formatting and
-types, and runs the unit tests.
-
-The background worker persists analytics (sessions, exchanges, token usage and
-feedback), refreshes conversation summaries and writes the response cache.
-Answers work without it, tasks queue up in Redis until a worker consumes them,
-so it is optional in development, with two caveats: nothing reaches PostgreSQL,
-and no answer is ever cached.
-
-Run the worker in the other process:
-
-```bash
-scripts/dev --worker
-```
+To self-host it, read the [deployment guide](deploy/README.md).
 
 ---
 
