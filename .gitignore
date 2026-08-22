@@ -107,6 +107,9 @@ venv.bak/
 # Pyre type checker
 .pyre/
 
+# macOS
+.DS_Store
+
 # Vscode
 .vscode/
 .history/
