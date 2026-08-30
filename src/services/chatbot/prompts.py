@@ -300,6 +300,8 @@ When updating summaries, ALWAYS:
 • Remove: redundancies, outdated information, irrelevant details
 • Maintain chronology: the most recent information takes priority over
   older information
+• Write the summary in the language the visitor is using, so it never becomes
+  a language signal that contradicts the conversation
 </guidelines>
 
 <output_format>
