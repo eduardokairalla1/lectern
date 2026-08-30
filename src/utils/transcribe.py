@@ -43,6 +43,34 @@ def _parse_seconds(value: str) -> float | None:
         return None
 
 
+def _last_packet_end(csv: str) -> float | None:
+    """
+    Derive the duration from the end timestamp of the last audio packet.
+
+    :param csv: ffprobe's packet listing, as 'pts_time,duration_time' rows.
+
+    :return: The end timestamp of the last usable packet, or None when the
+        listing carries no timestamp at all.
+    """
+    # iterate over the rows in reverse order
+    for row in reversed(csv.strip().splitlines()):
+
+        # parse the start timestamp and duration of the packet
+        fields = row.split(',')
+        start = _parse_seconds(fields[0])
+
+        # start timestamp is missing: skip this packet and keep looking
+        if start is None:
+            continue
+
+        # duration is present: return the end timestamp of this packet
+        length = _parse_seconds(fields[1]) if len(fields) > 1 else None
+        return start + (length or 0.0)
+
+    # no packet carried a timestamp: return None
+    return None
+
+
 async def _probe(path: str, *args: str) -> str:
     """
     Run ffprobe over a file and return its stdout.
@@ -83,7 +111,7 @@ async def _probe(path: str, *args: str) -> str:
 
 async def _read_audio_duration(audio_bytes: bytes, ext: str) -> float:
     """
-    Read the audio duration from the container metadata, using ffprobe.
+    Read the audio duration, using ffprobe.
 
     :param audio_bytes: Decoded audio bytes.
     :param ext: Audio format extension.
@@ -106,16 +134,31 @@ async def _read_audio_duration(audio_bytes: bytes, ext: str) -> float:
             '-show_entries', 'format=duration',
             '-of', 'default=noprint_wrappers=1:nokey=1',
         ))
+        if declared is not None and declared > 0:
+            return declared
 
-    # ffprobe did not declare a duration: log and raise
-    if declared is None:
+        # ffprobe did not declare a duration: read the last packet's
+        # end timestamp
+        logger.debug(
+            f'Container declares no duration ({ext}): '
+            f'reading it from the packet timestamps.'
+        )
+        measured = _last_packet_end(await _probe(
+            tmp.name,
+            '-select_streams', 'a:0',
+            '-show_entries', 'packet=pts_time,duration_time',
+            '-of', 'csv=p=0',
+        ))
+
+    # ffprobe did not report any usable packet timestamps: log and raise
+    if measured is None or measured <= 0:
         logger.error(
             f'Transcription failed: audio carries no duration ({ext}).'
         )
         raise InvalidRequestError()
 
-    # return the declared duration
-    return declared
+    # return the measured duration
+    return measured
 
 
 async def _validate_audio_duration(audio_bytes: bytes, ext: str) -> None:
