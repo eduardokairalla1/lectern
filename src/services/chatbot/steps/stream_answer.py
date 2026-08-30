@@ -50,6 +50,7 @@ async def stream_answer(state: State) -> AsyncGenerator[StreamEvent, None]:
         message=state['message'],
         history=state['memoryText'],
         context=state['context'],
+        language=state['language'],
     )
 
     # initialize variables for the full response and token usage
