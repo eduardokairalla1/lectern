@@ -46,3 +46,29 @@ class ResponseOutputParser(BaseModel):
             "'projects', 'skills', 'contact'). Use 'unknown' if unclear."
         ),
     )
+
+
+class RewriteOutputParser(BaseModel):
+    """
+    Output parser for the query rewrite.
+    """
+    language: str = Field(
+        ...,
+        description=(
+            "The language of the user's LATEST message, as an English name "
+            "('English', 'Portuguese', 'Spanish'). When that message is too "
+            "short to identify on its own ('yes please', 'ok', 'go on', "
+            "'sim'), it is a follow-up: report the language of the "
+            'conversation so far, taken from the previous assistant reply in '
+            'the context. Never report the language of the retrieved '
+            'documents.'
+        ),
+    )
+    query: str = Field(
+        ...,
+        description=(
+            'The reformulated, self-contained search query, following the '
+            'rewrite instructions. This is used for vector search only, never '
+            'shown to the user.'
+        ),
+    )

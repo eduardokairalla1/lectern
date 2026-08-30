@@ -8,6 +8,7 @@ from langchain_openai.embeddings import OpenAIEmbeddings
 from openai import AsyncOpenAI
 from src.config import config
 from src.schemas.outputparser import ResponseOutputParser
+from src.schemas.outputparser import RewriteOutputParser
 
 
 # --- GLOBALS ---
@@ -27,6 +28,10 @@ MEMORY_LLM = ChatOpenAI(
 
 REWRITE_MODEL = ChatOpenAI(
     api_key=config.OPENAI_API_KEY_REWRITE, model=config.REWRITE_MODEL
+)
+
+STRUCTURED_REWRITE_MODEL = REWRITE_MODEL.with_structured_output(
+    RewriteOutputParser, include_raw=True
 )
 
 TRANSCRIBE_LLM = AsyncOpenAI(api_key=config.OPENAI_API_KEY_TRANSCRIBE)
