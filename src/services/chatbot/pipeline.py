@@ -85,6 +85,7 @@ def build_initial_state(
         'exchangeId': str(uuid4()),
         'context': '',
         'rewrittenQuery': '',
+        'language': '',
         'recentInteractions': recent_interactions,
         'memoryText': '',
         'message': message,

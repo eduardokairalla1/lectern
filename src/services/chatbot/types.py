@@ -93,6 +93,7 @@ class State(TypedDict):
     recentInteractions: list[tuple[str, str]]
     memoryText: str
     rewrittenQuery: str
+    language: str
     context: str
     retrievedDocuments: NotRequired[list[RetrievedDocument]]
     message: str
