@@ -25,6 +25,62 @@ logger = logging.getLogger(__name__)
 
 
 # --- CODE ---
+def _parse_seconds(value: str) -> float | None:
+    """
+    Parse one timestamp from ffprobe's output.
+
+    :param value: A single ffprobe field.
+
+    :return: The value in seconds, or None when ffprobe printed 'N/A' or
+        anything else that is not a number.
+    """
+    # parse the value as a float
+    try:
+        return float(value.strip())
+
+    # parsing failed: return None
+    except ValueError:
+        return None
+
+
+async def _probe(path: str, *args: str) -> str:
+    """
+    Run ffprobe over a file and return its stdout.
+
+    :param path: Path to the audio file.
+    :param args: The ffprobe arguments describing what to read.
+
+    :raises ProcessingError: If ffprobe is missing from the host.
+    :raises InvalidRequestError: If ffprobe rejected the file.
+
+    :return: ffprobe's stdout, decoded.
+    """
+    # run ffprobe in a subprocess and capture its stdout and stderr
+    try:
+        process = await asyncio.create_subprocess_exec(
+            'ffprobe', '-v', 'error', *args, path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await process.communicate()
+
+    # ffprobe is not installed: log and raise
+    except FileNotFoundError as e:
+        logger.error('Audio duration check failed: ffprobe not found.')
+        raise ProcessingError({'error': 'ffprobe is not available'}) from e
+
+    # ffprobe rejected the file: it is corrupt or not really audio
+    if process.returncode != 0:
+        logger.error(
+            f'Transcription failed: unreadable audio. '
+            f'ffprobe: {stderr.decode().strip()}'
+        )
+        raise InvalidRequestError()
+
+    # return the decoded stdout
+    return stdout.decode()
+
+
 async def _read_audio_duration(audio_bytes: bytes, ext: str) -> float:
     """
     Read the audio duration from the container metadata, using ffprobe.
@@ -44,42 +100,22 @@ async def _read_audio_duration(audio_bytes: bytes, ext: str) -> float:
         await asyncio.to_thread(tmp.write, audio_bytes)
         tmp.flush()
 
-        # ask ffprobe for the duration alone
-        try:
-            process = await asyncio.create_subprocess_exec(
-                'ffprobe',
-                '-v', 'error',
-                '-show_entries', 'format=duration',
-                '-of', 'default=noprint_wrappers=1:nokey=1',
-                tmp.name,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await process.communicate()
+        # probe the file for its declared duration
+        declared = _parse_seconds(await _probe(
+            tmp.name,
+            '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+        ))
 
-        # ffprobe is not installed: log and raise
-        except FileNotFoundError as e:
-            logger.error('Audio duration check failed: ffprobe not found.')
-            raise ProcessingError({'error': 'ffprobe is not available'}) from e
-
-    # ffprobe rejected the file: it is corrupt or not really audio
-    if process.returncode != 0:
-        logger.error(
-            f'Transcription failed: unreadable audio. '
-            f'ffprobe: {stderr.decode().strip()}'
-        )
-        raise InvalidRequestError()
-
-    # parse the duration from ffprobe's output
-    try:
-        return float(stdout.decode().strip())
-
-    # ffprobe output is not a valid float: log and raise
-    except ValueError as e:
+    # ffprobe did not declare a duration: log and raise
+    if declared is None:
         logger.error(
             f'Transcription failed: audio carries no duration ({ext}).'
         )
-        raise InvalidRequestError() from e
+        raise InvalidRequestError()
+
+    # return the declared duration
+    return declared
 
 
 async def _validate_audio_duration(audio_bytes: bytes, ext: str) -> None:
