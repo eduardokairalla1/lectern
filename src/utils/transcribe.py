@@ -103,7 +103,7 @@ async def _probe(path: str, *args: str) -> str:
             f'Transcription failed: unreadable audio. '
             f'ffprobe: {stderr.decode().strip()}'
         )
-        raise InvalidRequestError()
+        raise InvalidRequestError({'reason': 'unreadable_audio'})
 
     # return the decoded stdout
     return stdout.decode()
@@ -155,7 +155,7 @@ async def _read_audio_duration(audio_bytes: bytes, ext: str) -> float:
         logger.error(
             f'Transcription failed: audio carries no duration ({ext}).'
         )
-        raise InvalidRequestError()
+        raise InvalidRequestError({'reason': 'undeterminable_duration'})
 
     # return the measured duration
     return measured
@@ -182,7 +182,11 @@ async def _validate_audio_duration(audio_bytes: bytes, ext: str) -> None:
             f'Duration: {duration_seconds:.1f}s, '
             f'Max: {config.MAX_AUDIO_DURATION_SECONDS}s'
         )
-        raise InvalidRequestError()
+        raise InvalidRequestError({
+            'reason': 'audio_too_long',
+            'duration_seconds': round(duration_seconds, 1),
+            'max_seconds': config.MAX_AUDIO_DURATION_SECONDS,
+        })
 
     # log the validated audio duration
     logger.info(f'Audio duration validated: {duration_seconds:.1f}s')
