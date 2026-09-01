@@ -35,6 +35,7 @@ async def answer(state: State) -> State:
         message=state['message'],
         history=state['memoryText'],
         context=state['context'],
+        language=state['language'],
     )
 
     # call the LLM

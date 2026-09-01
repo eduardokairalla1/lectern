@@ -122,6 +122,47 @@ class TestReadAudioDuration:
             await _read_audio_duration(b'audio', 'ogg')
 
     @pytest.mark.anyio
+    async def test_reads_the_duration_from_the_packets_when_the_header_lacks_it(
+        self, fake_ffprobe
+    ) -> None:
+        # what every browser sends: MediaRecorder muxes WebM live and never
+        # seeks back to write the Duration element, so the header says nothing
+        # about a file that is perfectly good audio
+        fake_ffprobe(
+            '#!/bin/sh\n'
+            'case "$*" in *packet=*) echo "6.960000,0.020000"\n'
+            'echo "6.980000,0.020000";; *) echo "N/A";; esac\n'
+        )
+        assert await _read_audio_duration(b'audio', 'webm') == 7.0
+
+    @pytest.mark.anyio
+    async def test_does_not_scan_packets_when_the_header_has_a_duration(
+        self, fake_ffprobe, tmp_path: Path
+    ) -> None:
+        # the packet scan walks the whole file; the cheap header read has to
+        # stay the path that a normal upload takes
+        marker = tmp_path / 'scanned'
+        fake_ffprobe(
+            '#!/bin/sh\n'
+            f'case "$*" in *packet=*) touch {marker};; esac\n'
+            'echo "12.345"\n'
+        )
+        assert await _read_audio_duration(b'audio', 'wav') == 12.345
+        assert not marker.exists()
+
+    @pytest.mark.anyio
+    async def test_packets_without_timestamps_are_a_client_error(
+        self, fake_ffprobe
+    ) -> None:
+        # nothing here can bound the length before paying the transcription
+        fake_ffprobe(
+            '#!/bin/sh\n'
+            'case "$*" in *packet=*) echo "N/A,N/A";; *) echo "N/A";; esac\n'
+        )
+        with pytest.raises(InvalidRequestError):
+            await _read_audio_duration(b'audio', 'webm')
+
+    @pytest.mark.anyio
     async def test_missing_ffprobe_is_a_server_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

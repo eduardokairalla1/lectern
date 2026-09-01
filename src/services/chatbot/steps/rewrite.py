@@ -3,7 +3,7 @@ Query rewriting step.
 """
 
 # --- IMPORTS ---
-from src.clients.llms import REWRITE_MODEL
+from src.clients.llms import STRUCTURED_REWRITE_MODEL
 from src.config import config
 from src.services.chatbot.prompts import build_rewrite_prompt
 from src.services.chatbot.types import Execution
@@ -58,7 +58,7 @@ async def rewrite_query(state: State) -> State:
 
     # call the rewrite model with a timeout
     try:
-        response = await REWRITE_MODEL.ainvoke(formattedPrompt)
+        response = await STRUCTURED_REWRITE_MODEL.ainvoke(formattedPrompt)
 
     # model call failed: keep the original query and carry on
     except Exception as e:
@@ -69,16 +69,34 @@ async def rewrite_query(state: State) -> State:
         state['rewrittenQuery'] = message
         return state
 
-    # get the rewritten query from the response and update the state
-    rewrittenQuery = response.text.strip()
+    # get the rewritten query and the detected language from the response
+    parsed = response['parsed']
+
+    # parsing failed: keep the original query and carry on
+    if parsed is None:
+        logger.warning(
+            f'[Step: rewrite_query] Unparsed rewrite, using original. '
+            f'Exchange: {state["exchangeId"]}, '
+            f'Error: {response.get("parsing_error")}'
+        )
+        state['rewrittenQuery'] = message
+        return state
+
+    # get the rewritten query, defaulting to the original message if empty
+    rewrittenQuery = parsed.query.strip() or message
 
     # append the rewrite execution to the state
     state['execution'].append(
         Execution.from_message(
-            response, 'query_rewrite', config.REWRITE_MODEL
+            response['raw'],
+            'query_rewrite',
+            config.REWRITE_MODEL
         )
     )
     state['rewrittenQuery'] = rewrittenQuery
+
+    # set the detected language in the state, stripping whitespace
+    state['language'] = parsed.language.strip()
 
     logger.debug(
         f'[Step: rewrite_query] Query rewritten '

@@ -72,6 +72,9 @@ rules, follow these.
    source material NEVER dictates the language of your reply — the user's
    message does. NEVER mix languages (never borrow words or boilerplate from
    another language). This includes the apology text.
+   A SHORT follow-up ("yes please", "go on", "ok") does NOT reset the language:
+   it inherits the language you were already replying in. Switching language
+   mid-conversation, when the visitor did not switch, is a bug.
 
 5. OUTPUT PURITY — Your reply is ONLY the natural-language message shown to the
    visitor. NEVER write internal field names, values or annotations inside it:
@@ -95,6 +98,13 @@ rules, follow these.
   American/British English).
 - Keep the WHOLE reply in one language — never mix in words or phrases from
   another language (this is a hard rule; see <hard_rules> #4).
+- A SHORT follow-up ("yes please", "go on", "ok", "sim", "manda") carries
+  almost no language signal on its own, while the <rag_context> around it is a
+  wall of [[corpus_language]]. Do NOT let that decide for you: a follow-up
+  inherits the language of YOUR OWN previous reply in <conversation_history>.
+- Never switch language mid-conversation unless the VISITOR clearly switched
+  first. Context or memory appearing in [[corpus_language]] is not the visitor
+  switching.
 - The fallback apology message must also be written in the user's language.
 - Never announce or comment on which language you are using; just use it.
 </language>
@@ -290,6 +300,8 @@ When updating summaries, ALWAYS:
 • Remove: redundancies, outdated information, irrelevant details
 • Maintain chronology: the most recent information takes priority over
   older information
+• Write the summary in the language the visitor is using, so it never becomes
+  a language signal that contradicts the conversation
 </guidelines>
 
 <output_format>
@@ -343,7 +355,8 @@ TRANSCRIPTION_PROMPT = _render(TRANSCRIPTION_TEMPLATE)
 def build_answer_prompt(
     message: str,
     history: str,
-    context: str
+    context: str,
+    language: str = ''
 ) -> list[BaseMessage]:
     """
     Builds the formatted answer prompt.
@@ -351,16 +364,51 @@ def build_answer_prompt(
     :param message: The user's latest message.
     :param history: Formatted conversation memory.
     :param context: Formatted RAG context.
+    :param language: Language the reply must be written in, as detected by the
+        rewrite step. Empty when no rewrite ran, in which case the model is
+        told to infer it from the message.
 
     :return: List of formatted prompt messages.
     """
+
+    # define base rule for reply language
+    rule = (
+      "The visitor's message comes right after this system prompt. "
+      'Write your ENTIRE reply in ITS language.'
+    )
+
+    # rewrite step detected a language: add a strict directive to obey it
+    if language:
+        rule = (
+            f'Write your ENTIRE reply in {language}, and only in {language}. '
+            'This was detected from the conversation and is not open to '
+            'reinterpretation.'
+        )
+
+    # get the corpus language from the identity
+    corpus_language = get_identity().persona.corpus_language
+
+    # build the language directive block
+    language_directive = (
+        '<reply_language>\n'
+        f'{rule}\n'
+        f'- The <rag_context> and the <baseline_summary> are written in '
+        f'{corpus_language}. That NEVER dictates your reply language.\n'
+        '- Translate the facts you use into the reply language; never quote '
+        f'them in {corpus_language}.\n'
+        '- Never switch language mid-conversation unless the visitor clearly '
+        'switched first.\n'
+        '</reply_language>'
+    )
+
     # build the system message
     system_content = (
         f'{ASSISTANT_SYSTEM_PROMPT}\n\n'
         f'<baseline_summary>\n{get_identity().persona.baseline_summary}\n'
         '</baseline_summary>\n\n'
         f'<conversation_history>\n{history}\n</conversation_history>\n\n'
-        f'<rag_context>\n{context}\n</rag_context>'
+        f'<rag_context>\n{context}\n</rag_context>\n\n'
+        f'{language_directive}'
     )
 
     # return the prompt messages

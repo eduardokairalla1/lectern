@@ -25,9 +25,93 @@ logger = logging.getLogger(__name__)
 
 
 # --- CODE ---
+def _parse_seconds(value: str) -> float | None:
+    """
+    Parse one timestamp from ffprobe's output.
+
+    :param value: A single ffprobe field.
+
+    :return: The value in seconds, or None when ffprobe printed 'N/A' or
+        anything else that is not a number.
+    """
+    # parse the value as a float
+    try:
+        return float(value.strip())
+
+    # parsing failed: return None
+    except ValueError:
+        return None
+
+
+def _last_packet_end(csv: str) -> float | None:
+    """
+    Derive the duration from the end timestamp of the last audio packet.
+
+    :param csv: ffprobe's packet listing, as 'pts_time,duration_time' rows.
+
+    :return: The end timestamp of the last usable packet, or None when the
+        listing carries no timestamp at all.
+    """
+    # iterate over the rows in reverse order
+    for row in reversed(csv.strip().splitlines()):
+
+        # parse the start timestamp and duration of the packet
+        fields = row.split(',')
+        start = _parse_seconds(fields[0])
+
+        # start timestamp is missing: skip this packet and keep looking
+        if start is None:
+            continue
+
+        # duration is present: return the end timestamp of this packet
+        length = _parse_seconds(fields[1]) if len(fields) > 1 else None
+        return start + (length or 0.0)
+
+    # no packet carried a timestamp: return None
+    return None
+
+
+async def _probe(path: str, *args: str) -> str:
+    """
+    Run ffprobe over a file and return its stdout.
+
+    :param path: Path to the audio file.
+    :param args: The ffprobe arguments describing what to read.
+
+    :raises ProcessingError: If ffprobe is missing from the host.
+    :raises InvalidRequestError: If ffprobe rejected the file.
+
+    :return: ffprobe's stdout, decoded.
+    """
+    # run ffprobe in a subprocess and capture its stdout and stderr
+    try:
+        process = await asyncio.create_subprocess_exec(
+            'ffprobe', '-v', 'error', *args, path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await process.communicate()
+
+    # ffprobe is not installed: log and raise
+    except FileNotFoundError as e:
+        logger.error('Audio duration check failed: ffprobe not found.')
+        raise ProcessingError({'error': 'ffprobe is not available'}) from e
+
+    # ffprobe rejected the file: it is corrupt or not really audio
+    if process.returncode != 0:
+        logger.error(
+            f'Transcription failed: unreadable audio. '
+            f'ffprobe: {stderr.decode().strip()}'
+        )
+        raise InvalidRequestError({'reason': 'unreadable_audio'})
+
+    # return the decoded stdout
+    return stdout.decode()
+
+
 async def _read_audio_duration(audio_bytes: bytes, ext: str) -> float:
     """
-    Read the audio duration from the container metadata, using ffprobe.
+    Read the audio duration, using ffprobe.
 
     :param audio_bytes: Decoded audio bytes.
     :param ext: Audio format extension.
@@ -44,42 +128,37 @@ async def _read_audio_duration(audio_bytes: bytes, ext: str) -> float:
         await asyncio.to_thread(tmp.write, audio_bytes)
         tmp.flush()
 
-        # ask ffprobe for the duration alone
-        try:
-            process = await asyncio.create_subprocess_exec(
-                'ffprobe',
-                '-v', 'error',
-                '-show_entries', 'format=duration',
-                '-of', 'default=noprint_wrappers=1:nokey=1',
-                tmp.name,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await process.communicate()
+        # probe the file for its declared duration
+        declared = _parse_seconds(await _probe(
+            tmp.name,
+            '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+        ))
+        if declared is not None and declared > 0:
+            return declared
 
-        # ffprobe is not installed: log and raise
-        except FileNotFoundError as e:
-            logger.error('Audio duration check failed: ffprobe not found.')
-            raise ProcessingError({'error': 'ffprobe is not available'}) from e
-
-    # ffprobe rejected the file: it is corrupt or not really audio
-    if process.returncode != 0:
-        logger.error(
-            f'Transcription failed: unreadable audio. '
-            f'ffprobe: {stderr.decode().strip()}'
+        # ffprobe did not declare a duration: read the last packet's
+        # end timestamp
+        logger.debug(
+            f'Container declares no duration ({ext}): '
+            f'reading it from the packet timestamps.'
         )
-        raise InvalidRequestError()
+        measured = _last_packet_end(await _probe(
+            tmp.name,
+            '-select_streams', 'a:0',
+            '-show_entries', 'packet=pts_time,duration_time',
+            '-of', 'csv=p=0',
+        ))
 
-    # parse the duration from ffprobe's output
-    try:
-        return float(stdout.decode().strip())
-
-    # ffprobe output is not a valid float: log and raise
-    except ValueError as e:
+    # ffprobe did not report any usable packet timestamps: log and raise
+    if measured is None or measured <= 0:
         logger.error(
             f'Transcription failed: audio carries no duration ({ext}).'
         )
-        raise InvalidRequestError() from e
+        raise InvalidRequestError({'reason': 'undeterminable_duration'})
+
+    # return the measured duration
+    return measured
 
 
 async def _validate_audio_duration(audio_bytes: bytes, ext: str) -> None:
@@ -103,7 +182,11 @@ async def _validate_audio_duration(audio_bytes: bytes, ext: str) -> None:
             f'Duration: {duration_seconds:.1f}s, '
             f'Max: {config.MAX_AUDIO_DURATION_SECONDS}s'
         )
-        raise InvalidRequestError()
+        raise InvalidRequestError({
+            'reason': 'audio_too_long',
+            'duration_seconds': round(duration_seconds, 1),
+            'max_seconds': config.MAX_AUDIO_DURATION_SECONDS,
+        })
 
     # log the validated audio duration
     logger.info(f'Audio duration validated: {duration_seconds:.1f}s')

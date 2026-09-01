@@ -130,5 +130,10 @@ instead of being recreated per task.
 - **A hand-rolled CORS middleware.** Starlette's applies one origin policy to
   the whole app and buffers the response; this one scopes `/whoami` open to
   any origin and streams safely in front of the SSE endpoint.
-- **Audio duration read with `ffprobe`**, not by decoding. It reads the
-  container metadata, so the cost does not grow with the length of the audio.
+- **Audio duration read with `ffprobe`**, never by decoding. The container
+  metadata is read first, at a cost independent of the length of the audio.
+  Browsers are the exception: `MediaRecorder` muxes WebM live and never seeks
+  back to write the `Duration` element, so the header reports nothing for a
+  file that is perfectly good audio. That falls back to the timestamp of the
+  last packet, which walks the file but only demuxes — tens of milliseconds
+  for a five-minute recording, over a payload that is size-capped anyway.

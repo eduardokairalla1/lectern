@@ -1,11 +1,21 @@
+# python virtual environments
 .venv
-__pycache__
-*.pyc
-*.pyo
-*.pyd
+**/__pycache__
+**/*.py[cod]
+
+# tooling caches
 .pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+
+# vcs, docs and local state
 .git
 .gitignore
-.env
+.gitattributes
 *.md
 tests/
+deploy/data
+
+# ignore local config files
+identity.yaml
